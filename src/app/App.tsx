@@ -722,6 +722,8 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
   const [cmArtist, setCmArtist] = useState<any>(null);
   const [spotifyData, setSpotifyData] = useState<any>(null);
   const [topTracks, setTopTracks] = useState<any[]>([]);
+  const [timeRange, setTimeRange] = useState<"24h" | "7d" | "28d">("28d");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -764,11 +766,50 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
     genre: artist.genre,
   };
 
-  // Generate some realistic-looking random numbers for the UI based on the artist's real data
-  const baseStreams = cmArtist?.sp_monthly_listeners || 16958180;
+  const fullMonthlyListeners = cmArtist?.sp_monthly_listeners || 16958180;
+  const fullTotalStreams = cmArtist?.total_streams || Math.round((cmArtist?.sp_followers || 60797409) * 3.5);
+
+  const baseStreams = timeRange === "28d"
+    ? fullMonthlyListeners
+    : timeRange === "7d"
+    ? Math.round(fullMonthlyListeners * 0.25)
+    : Math.round(fullMonthlyListeners * 0.035);
+
+  const totalStreams = timeRange === "28d"
+    ? fullTotalStreams
+    : timeRange === "7d"
+    ? Math.round(fullTotalStreams * 0.25)
+    : Math.round(fullTotalStreams * 0.035);
+
   const monthlyActiveListeners = Math.round(baseStreams * 0.48);
   const newActiveListeners = Math.round(baseStreams * 0.082);
   const superListeners = Math.round(baseStreams * 0.018);
+
+  const rangeStats = {
+    "24h": {
+      listenersChange: { value: "0.5%", isPositive: true },
+      streamsChange: { value: "0.2%", isPositive: false },
+      activeChange: { value: "0.1%", isPositive: true },
+      newChange: { value: "0.4%", isPositive: true },
+      superChange: { value: "0.5%", isPositive: false },
+    },
+    "7d": {
+      listenersChange: { value: "4.2%", isPositive: true },
+      streamsChange: { value: "1.5%", isPositive: true },
+      activeChange: { value: "0.8%", isPositive: true },
+      newChange: { value: "2.1%", isPositive: true },
+      superChange: { value: "2.3%", isPositive: false },
+    },
+    "28d": {
+      listenersChange: { value: "7%", isPositive: true },
+      streamsChange: { value: "1%", isPositive: false },
+      activeChange: { value: "0.4%", isPositive: false },
+      newChange: { value: "3.7%", isPositive: true },
+      superChange: { value: "7.2%", isPositive: false },
+    }
+  };
+
+  const currentStats = rangeStats[timeRange];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background">
@@ -814,23 +855,56 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
               <div className="col-span-4">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-[15px] font-bold text-foreground">Streaming stats</h2>
-                  <div className="flex items-center gap-1 text-[13px] text-muted-foreground cursor-pointer hover:text-foreground">
-                    Last 28 days <ChevronDown className="w-4 h-4" />
+                  <div className="relative">
+                    <button
+                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                      className="flex items-center gap-1 text-[13px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors font-medium"
+                    >
+                      Last {timeRange === "24h" ? "24 hours" : timeRange === "7d" ? "7 days" : "28 days"} <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {dropdownOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40 cursor-default"
+                          onClick={() => setDropdownOpen(false)}
+                        />
+                        <div className="absolute right-0 top-full mt-1.5 w-[140px] bg-white border border-border rounded-xl shadow-xl p-1.5 z-50 flex flex-col gap-0.5">
+                          {(["24h", "7d", "28d"] as const).map(range => (
+                            <button
+                              key={range}
+                              onClick={() => {
+                                setTimeRange(range);
+                                setDropdownOpen(false);
+                              }}
+                              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-bold text-left hover:bg-muted/50 text-foreground transition-colors"
+                            >
+                              <span>{range === "24h" ? "24 hours" : range === "7d" ? "7 days" : "28 days"}</span>
+                              {timeRange === range && (
+                                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="3" fill="none" className="text-foreground"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="bg-card rounded-xl p-5 shadow-sm grid grid-cols-2 gap-4">
                   <div>
                     <div className="text-[12px] text-muted-foreground font-medium mb-1 truncate">Monthly listeners</div>
                     <div className="text-[24px] font-bold text-foreground tracking-tight mb-2 truncate">{baseStreams.toLocaleString()}</div>
-                    <div className="flex items-center gap-1 text-[12px] font-bold text-[#1DB954]">
-                      <TrendingUp className="w-3.5 h-3.5" /> 7%
+                    <div className={`flex items-center gap-1 text-[12px] font-bold ${currentStats.listenersChange.isPositive ? "text-[#1DB954]" : "text-destructive"}`}>
+                      {currentStats.listenersChange.isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      {currentStats.listenersChange.isPositive ? "" : "-"}{currentStats.listenersChange.value}
                     </div>
                   </div>
                   <div>
                     <div className="text-[12px] text-muted-foreground font-medium mb-1 truncate">Streams</div>
-                    <div className="text-[24px] font-bold text-foreground tracking-tight mb-2 truncate">{(cmArtist?.total_streams || Math.round((cmArtist?.sp_followers || 60797409) * 3.5)).toLocaleString()}</div>
-                    <div className="flex items-center gap-1 text-[12px] font-bold text-destructive">
-                      <TrendingDown className="w-3.5 h-3.5" /> -1%
+                    <div className="text-[24px] font-bold text-foreground tracking-tight mb-2 truncate">{totalStreams.toLocaleString()}</div>
+                    <div className={`flex items-center gap-1 text-[12px] font-bold ${currentStats.streamsChange.isPositive ? "text-[#1DB954]" : "text-destructive"}`}>
+                      {currentStats.streamsChange.isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      {currentStats.streamsChange.isPositive ? "" : "-"}{currentStats.streamsChange.value}
                     </div>
                   </div>
                 </div>
@@ -848,8 +922,9 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
                       Monthly active listeners <HelpCircle className="w-3.5 h-3.5" />
                     </div>
                     <div className="text-[24px] font-bold text-foreground tracking-tight mb-2">{monthlyActiveListeners.toLocaleString()}</div>
-                    <div className="flex items-center gap-1 text-[12px] font-bold text-muted-foreground">
-                      <TrendingDown className="w-3.5 h-3.5 text-destructive" /> -0.4%
+                    <div className={`flex items-center gap-1 text-[12px] font-bold ${currentStats.activeChange.isPositive ? "text-[#1DB954]" : "text-destructive"}`}>
+                      {currentStats.activeChange.isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5 text-destructive" />}
+                      {currentStats.activeChange.isPositive ? "" : "-"}{currentStats.activeChange.value}
                     </div>
                   </div>
                   <div>
@@ -857,8 +932,9 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
                       New active listeners <HelpCircle className="w-3.5 h-3.5" />
                     </div>
                     <div className="text-[24px] font-bold text-foreground tracking-tight mb-2">{newActiveListeners.toLocaleString()}</div>
-                    <div className="flex items-center gap-1 text-[12px] font-bold text-[#1DB954]">
-                      <TrendingUp className="w-3.5 h-3.5" /> 3.7%
+                    <div className={`flex items-center gap-1 text-[12px] font-bold ${currentStats.newChange.isPositive ? "text-[#1DB954]" : "text-destructive"}`}>
+                      {currentStats.newChange.isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      {currentStats.newChange.isPositive ? "" : "-"}{currentStats.newChange.value}
                     </div>
                   </div>
                   <div>
@@ -866,8 +942,9 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
                       Super listeners <HelpCircle className="w-3.5 h-3.5" />
                     </div>
                     <div className="text-[24px] font-bold text-foreground tracking-tight mb-2">{superListeners.toLocaleString()}</div>
-                    <div className="flex items-center gap-1 text-[12px] font-bold text-destructive">
-                      <TrendingDown className="w-3.5 h-3.5" /> -7.2%
+                    <div className={`flex items-center gap-1 text-[12px] font-bold ${currentStats.superChange.isPositive ? "text-[#1DB954]" : "text-destructive"}`}>
+                      {currentStats.superChange.isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      {currentStats.superChange.isPositive ? "" : "-"}{currentStats.superChange.value}
                     </div>
                   </div>
                 </div>
