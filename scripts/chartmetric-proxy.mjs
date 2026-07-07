@@ -183,21 +183,28 @@ async function spotifyCatalogHandler(req, res) {
         ? await fetchArtistCatalogById(String(id), SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
         : await fetchArtistCatalog(String(name), SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET);
         
-      // Merge RapidAPI real stream counts for top tracks
+      // Merge RapidAPI real stream counts for ALL tracks (sequential batches to avoid 429)
       const artistName = catalog?.artist?.name || name || 'Rema';
-      if (RAPIDAPI_SPOTIFY_KEY && catalog?.tracks) {
-        const topTracksToFetch = catalog.tracks.slice(0, 8);
-        await Promise.all(topTracksToFetch.map(async (track) => {
-          const realStreams = await getRapidAPIStreamCount(track.name, artistName, RAPIDAPI_SPOTIFY_KEY);
-          if (realStreams != null) {
-            track.cm_statistics = {
-              ...track.cm_statistics,
-              sp_streams: realStreams,
-              sp_listeners: Math.round(realStreams * 0.48),
-              sp_saves: Math.round(realStreams * 0.08)
-            };
+      if (RAPIDAPI_SPOTIFY_KEY && catalog?.tracks?.length) {
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < catalog.tracks.length; i += BATCH_SIZE) {
+          const batch = catalog.tracks.slice(i, i + BATCH_SIZE);
+          await Promise.all(batch.map(async (track) => {
+            const realStreams = await getRapidAPIStreamCount(track.name, artistName, RAPIDAPI_SPOTIFY_KEY);
+            if (realStreams != null) {
+              track.cm_statistics = {
+                ...track.cm_statistics,
+                sp_streams: realStreams,
+                sp_listeners: Math.round(realStreams * 0.48),
+                sp_saves: Math.round(realStreams * 0.08)
+              };
+            }
+          }));
+          // Small delay between batches to stay under RapidAPI rate limits
+          if (i + BATCH_SIZE < catalog.tracks.length) {
+            await new Promise(r => setTimeout(r, 300));
           }
-        }));
+        }
       }
 
       artistMap.set(cacheKey, catalog);
@@ -213,7 +220,7 @@ async function spotifyCatalogHandler(req, res) {
         { id: 'mock-t5', name: 'Rush', album: '19 & Dangerous', release_date: '2021-08-06', popularity: 82, image_url: null, artists: [name] }
       ].map((t, idx) => {
         const pop = t.popularity;
-        const streams = Math.round(pop * 1254302);
+        const streams = Math.round(1000 * Math.exp(0.1455 * pop));
         return {
           ...t,
           cm_statistics: {

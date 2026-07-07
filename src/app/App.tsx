@@ -1219,7 +1219,7 @@ function MusicView({ artist }: { artist?: Artist }) {
           .filter(song => song.artist?.toLowerCase().includes(resolvedArtist.name.toLowerCase()))
           .map((song, index) => {
             const popularity = song.popularity ?? song.trend ?? 0;
-            const streams = Math.round(popularity * 1254302);
+            const streams = Math.round(1000 * Math.exp(0.1455 * (popularity || 1)));
             return {
               id: song.id,
               name: song.title,
