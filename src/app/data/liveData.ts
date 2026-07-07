@@ -93,6 +93,21 @@ export type Kpi = {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
+function joinUrl(base: string, path: string) {
+  const cleanBase = String(base || '').replace(/\/+$/, '');
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${cleanBase}${cleanPath}`;
+}
+
+function withQuery(url: string, params: Record<string, string | undefined>) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && value !== '') search.set(key, value);
+  });
+  const query = search.toString();
+  return query ? `${url}?${query}` : url;
+}
+
 async function safeJson<T>(url: string, options?: RequestInit): Promise<T | null> {
   try {
     const response = await fetch(url, {
@@ -110,9 +125,10 @@ async function safeJson<T>(url: string, options?: RequestInit): Promise<T | null
 }
 
 async function fetchSpotifyLiveData(artists?: string[]) {
-  const url = new URL(`${API_BASE}/spotify/live`, location.origin);
-  if (artists?.length) url.searchParams.set('artists', artists.join(','));
-  return safeJson<Partial<LiveDataBundle>>(url.toString());
+  const url = withQuery(joinUrl(API_BASE, '/spotify/live'), {
+    artists: artists?.length ? artists.join(',') : undefined,
+  });
+  return safeJson<Partial<LiveDataBundle>>(url);
 }
 
 async function fetchChartmetricData() {
@@ -163,11 +179,12 @@ export async function fetchChartmetricArtistByName(name: string): Promise<Chartm
   try {
     const token = await getChartmetricToken();
     if (!token) return null;
-    const url = new URL('/cm-api/search', location.origin);
-    url.searchParams.set('q', name);
-    url.searchParams.set('type', 'artists');
-    url.searchParams.set('limit', '1');
-    const res = await fetch(url.toString(), {
+    const url = withQuery('/cm-api/search', {
+      q: name,
+      type: 'artists',
+      limit: '1',
+    });
+    const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) return null;
@@ -183,11 +200,12 @@ export async function searchChartmetricArtists(query: string): Promise<Chartmetr
   try {
     const token = await getChartmetricToken();
     if (!token) return [];
-    const url = new URL('/cm-api/search', location.origin);
-    url.searchParams.set('q', query);
-    url.searchParams.set('type', 'artists');
-    url.searchParams.set('limit', '5');
-    const res = await fetch(url.toString(), {
+    const url = withQuery('/cm-api/search', {
+      q: query,
+      type: 'artists',
+      limit: '5',
+    });
+    const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) return [];
@@ -220,10 +238,11 @@ export async function fetchArtistChartSeries(name: string, chartType = 'spotify_
   if (!artist?.id) return null;
   const token = await getChartmetricToken();
   if (!token) return null;
-  const url = new URL(`/cm-api/artist/${artist.id}/${chartType}/charts`, location.origin);
-  if (since) url.searchParams.set('since', since);
-  if (until) url.searchParams.set('until', until);
-  const res = await fetch(url.toString(), {
+  const url = withQuery(`/cm-api/artist/${artist.id}/${chartType}/charts`, {
+    since: since || undefined,
+    until: until || undefined,
+  });
+  const res = await fetch(url, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   if (!res.ok) return null;
@@ -235,10 +254,11 @@ export async function fetchArtistWherePeopleListen(name: string, since?: string 
   if (!artist?.id) return null;
   const token = await getChartmetricToken();
   if (!token) return null;
-  const url = new URL(`/cm-api/artist/${artist.id}/where-people-listen`, location.origin);
-  if (since) url.searchParams.set('since', since);
-  if (until) url.searchParams.set('until', until);
-  const res = await fetch(url.toString(), {
+  const url = withQuery(`/cm-api/artist/${artist.id}/where-people-listen`, {
+    since: since || undefined,
+    until: until || undefined,
+  });
+  const res = await fetch(url, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   if (!res.ok) return null;
@@ -250,24 +270,26 @@ export async function fetchArtistSocialAudienceStats(name: string, domain: 'inst
   if (!artist?.id) return null;
   const token = await getChartmetricToken();
   if (!token) return null;
-  const url = new URL(`/cm-api/artist/${artist.id}/social-audience-stats`, location.origin);
-  url.searchParams.set('domain', domain);
-  url.searchParams.set('audienceType', audienceType);
-  url.searchParams.set('statsType', statsType);
-  if (since) url.searchParams.set('since', since);
-  if (until) url.searchParams.set('until', until);
-  const res = await fetch(url.toString(), {
+  const url = withQuery(`/cm-api/artist/${artist.id}/social-audience-stats`, {
+    domain,
+    audienceType,
+    statsType,
+    since: since || undefined,
+    until: until || undefined,
+  });
+  const res = await fetch(url, {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   if (!res.ok) return null;
   return res.json();
 }
 
-export async function fetchSpotifyArtistCatalog(name: string): Promise<{ artist: { id: string; name: string; followers: number; image_url: string | null; genres: string[]; popularity: number; spotify_url: string; } | null; tracks: SpotifyTrackSummary[] } | null> {
+export async function fetchSpotifyArtistCatalog(name: string): Promise<{ artist: { id: string; name: string; followers: number; image_url: string | null; genres: string[]; popularity: number; spotify_url: string; } | null; tracks: SpotifyTrackSummary[]; albums?: any[] } | null> {
   try {
-    const url = new URL(`${SPOTIFY_PROXY}/spotify/artist-catalog`, location.origin);
-    url.searchParams.set('name', name);
-    const res = await fetch(url.toString());
+    const url = withQuery(joinUrl(SPOTIFY_PROXY, '/spotify/artist-catalog'), {
+      name,
+    });
+    const res = await fetch(url);
     if (!res.ok) return null;
     return res.json();
   } catch {
@@ -275,16 +297,58 @@ export async function fetchSpotifyArtistCatalog(name: string): Promise<{ artist:
   }
 }
 
+export async function fetchSpotifyArtistCatalogById(id: string): Promise<{ artist: { id: string; name: string; followers: number; image_url: string | null; genres: string[]; popularity: number; spotify_url: string; } | null; tracks: SpotifyTrackSummary[]; albums?: any[] } | null> {
+  try {
+    const url = withQuery(joinUrl(SPOTIFY_PROXY, '/spotify/artist-catalog'), {
+      id,
+    });
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchSpotifyArtistPlaylists(name: string): Promise<any[]> {
+  try {
+    const url = withQuery(joinUrl(SPOTIFY_PROXY, '/spotify/artist-playlists'), {
+      name,
+    });
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function searchSpotifyArtists(query: string, limit = 10): Promise<{ id: string; name: string; image_url: string | null; followers: number; genres: string[]; popularity: number; spotify_url: string; }[]> {
+  try {
+    const url = withQuery(joinUrl(SPOTIFY_PROXY, '/spotify/search-artists'), {
+      q: query,
+      limit: String(limit),
+    });
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchSpotifyArtist(name: string) {
-  const url = new URL(`${API_BASE}/spotify/artist`, location.origin);
-  url.searchParams.set('name', name);
-  return safeJson<{ artist: { id: string; name: string; followers: number; image_url: string | null; genres: string[]; popularity: number; spotify_url: string; } | null; tracks: SpotifyTrackSummary[] }>(url.toString());
+  const url = withQuery(joinUrl(API_BASE, '/spotify/artist'), {
+    name,
+  });
+  return safeJson<{ artist: { id: string; name: string; followers: number; image_url: string | null; genres: string[]; popularity: number; spotify_url: string; } | null; tracks: SpotifyTrackSummary[] }>(url);
 }
 
 export async function fetchSpotifyArtistProfile(name: string) {
-  const url = new URL(`${SPOTIFY_PROXY}/spotify/artist-profile`, location.origin);
-  url.searchParams.set('name', name);
-  return safeJson<{ artist: { id: string; name: string; followers?: { total: number }; images?: { url: string }[]; genres?: string[]; popularity?: number; external_urls?: { spotify: string }; } | null }>(url.toString());
+  const url = withQuery(joinUrl(SPOTIFY_PROXY, '/spotify/artist-profile'), {
+    name,
+  });
+  return safeJson<{ artist: { id: string; name: string; followers?: { total: number }; images?: { url: string }[]; genres?: string[]; popularity?: number; external_urls?: { spotify: string }; } | null }>(url);
 }
 
 async function fetchXpozData() {

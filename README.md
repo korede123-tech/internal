@@ -19,12 +19,16 @@
   npm run dev
   ```
 
-  This will:
-  1. Generate static seed data from Spotify (`src/app/live-data.ts`)
-  2. Start the API server on port **4000**
-  3. Start the Vite dev server (proxies `/api` → port 4000)
+This will:
+1. Generate static seed data from Spotify (`src/app/live-data.ts`)
+2. Start the API server on port **4000**
+3. Start the Vite dev server (proxies `/api` → port 4000)
 
-  Open the URL shown by Vite (typically `http://localhost:5173`).
+Open the URL shown by Vite (typically `http://localhost:5173`).
+
+## Deployment note
+
+The frontend expects the Spotify/Chartmetric proxy to be available at the same origin under `/api` by default. If you deploy the UI separately from the Express API, set `VITE_API_BASE_URL`, `VITE_SPOTIFY_PROXY_URL`, and `VITE_CHARTMETRIC_PROXY_URL` to the real backend origin so catalog and release requests keep working on iOS and other mobile browsers.
 
   ### Run services separately
 

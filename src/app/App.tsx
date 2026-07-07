@@ -14,6 +14,7 @@ import {
   User, Mic2, List, AlignLeft, Layers, Eye, SkipForward,
   Bookmark, Globe2, Headphones, LayoutGrid, Instagram, Twitter, HelpCircle, ArrowRight, ChevronLeft, PlaySquare, Disc, Info, SlidersHorizontal, Music, ExternalLink, PieChart, ArrowUp, ArrowDown,
 } from "lucide-react";
+
 import {
   roster,
   songs,
@@ -33,14 +34,14 @@ import {
   aiConvInsights,
   slSuggestions,
 } from "./live-data";
-import { fetchSpotifyArtistProfile, fetchSpotifyArtistCatalog, loadLiveData, fetchChartmetricArtistByName, fetchChartmetricArtistTracks, searchChartmetricArtists } from "./data/liveData";
+import { fetchSpotifyArtistProfile, fetchSpotifyArtistCatalog, fetchSpotifyArtistCatalogById, fetchSpotifyArtistPlaylists, loadLiveData, fetchChartmetricArtistByName, fetchChartmetricArtistTracks, searchSpotifyArtists } from "./data/liveData";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type View =
   | "dashboard" | "artists" | "music" | "ai" | "social"
   | "campaigns" | "calendar" | "reports" | "settings" | "audience";
 
-type Artist = typeof roster[0];
+type Artist = (typeof roster)[number] & { spotify_id?: string };
 type Song = typeof songs[0];
 
 const kpiIconMap = {
@@ -74,9 +75,9 @@ function GlobalSearch() {
 
   const filtered = query.length >= 1
     ? searchIndex.map(section => ({
-        ...section,
-        items: section.items.filter(item => item.toLowerCase().includes(query.toLowerCase())).slice(0, 3),
-      })).filter(s => s.items.length > 0)
+      ...section,
+      items: section.items.filter(item => item.toLowerCase().includes(query.toLowerCase())).slice(0, 3),
+    })).filter(s => s.items.length > 0)
     : [];
 
   return (
@@ -144,7 +145,7 @@ function Header({ onSelectArtist }: { onSelectArtist?: (a: Artist) => void }) {
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const hits = await searchChartmetricArtists(query);
+        const hits = await searchSpotifyArtists(query);
         setResults(hits);
       } catch {
         setResults([]);
@@ -162,14 +163,18 @@ function Header({ onSelectArtist }: { onSelectArtist?: (a: Artist) => void }) {
         name: cmArtist.name || "Unknown",
         genre: "Music",
         country: "Global",
-        monthlyListeners: Math.round((cmArtist.sp_monthly_listeners || 0) / 1000000) + "M",
-        totalStreams: Math.round((cmArtist.sp_followers || 0) / 1000000) + "M",
-        growth: 0,
+        monthlyListeners: cmArtist.followers ? Math.round(cmArtist.followers / 1000000) + "M" : "0",
+        totalStreams: cmArtist.followers ? Math.round(cmArtist.followers / 1000) + "K" : "0",
+        growth: cmArtist.popularity || 0,
         release: "Latest Release",
         color: "#3B82F6",
         initials: (cmArtist.name || "UN").slice(0, 2).toUpperCase(),
         status: "active",
         image_url: cmArtist.image_url,
+        spotify_url: cmArtist.spotify_url,
+        popularity: cmArtist.popularity || 0,
+        followers: cmArtist.followers || 0,
+        spotify_id: cmArtist.id,
       };
       onSelectArtist(mappedArtist);
     }
@@ -215,11 +220,11 @@ function Header({ onSelectArtist }: { onSelectArtist?: (a: Artist) => void }) {
                       <div className="text-[13px] font-bold text-foreground truncate">{r.name}</div>
                       {r.sp_monthly_listeners ? (
                         <div className="text-[11px] text-muted-foreground">
-                          {r.sp_monthly_listeners >= 1000000 
-                            ? (r.sp_monthly_listeners / 1000000).toFixed(1) + 'M' 
-                            : r.sp_monthly_listeners >= 1000 
-                            ? (r.sp_monthly_listeners / 1000).toFixed(1) + 'K' 
-                            : r.sp_monthly_listeners} Spotify Listeners
+                          {r.sp_monthly_listeners >= 1000000
+                            ? (r.sp_monthly_listeners / 1000000).toFixed(1) + 'M'
+                            : r.sp_monthly_listeners >= 1000
+                              ? (r.sp_monthly_listeners / 1000).toFixed(1) + 'K'
+                              : r.sp_monthly_listeners} Spotify Listeners
                         </div>
                       ) : null}
                     </div>
@@ -469,7 +474,7 @@ function DashboardView({ onSelectArtist }: { onSelectArtist: (a: Artist) => void
           <div className="h-full bg-primary w-1/3 animate-[slide_1s_ease-in-out_infinite]" />
         </div>
       )}
-      
+
       {/* Header section with tabs and cards */}
       <div className="bg-[#f3f4fa] px-8 pt-8 pb-10 flex-shrink-0">
         <div className="flex items-center gap-6 border-b border-black/5 mb-6 pb-0">
@@ -510,12 +515,12 @@ function DashboardView({ onSelectArtist }: { onSelectArtist: (a: Artist) => void
         <div className="flex items-center justify-between mb-6">
           <div className="relative w-[300px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
-            <input 
-              placeholder="Search all artists" 
+            <input
+              placeholder="Search all artists"
               className="w-full pl-10 pr-4 py-2.5 text-[14px] bg-card border border-border hover:border-black/30 rounded-md outline-none focus:border-black text-foreground placeholder:text-muted-foreground font-medium transition-colors"
             />
           </div>
-          
+
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-5 bg-muted-foreground/30 hover:bg-muted-foreground/40 rounded-full relative cursor-pointer transition-colors">
@@ -525,8 +530,8 @@ function DashboardView({ onSelectArtist }: { onSelectArtist: (a: Artist) => void
             </div>
             <div className="flex items-center gap-1 bg-[#f0f0f0] p-1 rounded-full">
               {['24 hours', '7 days', '28 days', '12 months'].map((period, i) => (
-                <button 
-                  key={period} 
+                <button
+                  key={period}
                   className={`px-4 py-1.5 rounded-full text-[13px] font-bold transition-colors ${i === 2 ? 'bg-black text-white' : 'text-[#181818] hover:bg-black/5'}`}
                 >
                 </button>
@@ -552,9 +557,9 @@ function DashboardView({ onSelectArtist }: { onSelectArtist: (a: Artist) => void
             const growthNum = artist.growth || 0;
             const growthIsPos = growthNum >= 0;
             const growthColor = growthIsPos ? 'text-[#1ed760]' : 'text-[#e91429]';
-            
+
             return (
-              <div 
+              <div
                 key={artist.id}
                 onClick={() => onSelectArtist(artist)}
                 className="grid grid-cols-12 px-4 py-4 border-b border-black/5 hover:bg-black/[0.02] cursor-pointer items-center transition-colors group"
@@ -571,14 +576,14 @@ function DashboardView({ onSelectArtist }: { onSelectArtist: (a: Artist) => void
                   </div>
                   <span className="text-[15px] font-bold text-[#181818] group-hover:underline">{artist.name}</span>
                 </div>
-                
+
                 <div className="col-span-3 flex items-center justify-end gap-3 text-[14px] font-medium text-[#181818]">
                   {streamsStr}
                   <div className={`flex items-center gap-0.5 text-[12px] font-bold ${growthColor}`}>
                     {growthIsPos ? '▲' : '▼'} {Math.abs(growthNum)}%
                   </div>
                 </div>
-                
+
                 <div className="col-span-1 flex justify-center text-muted-foreground">—</div>
                 <div className="col-span-1 text-center text-muted-foreground">—</div>
                 <div className="col-span-2 text-right text-muted-foreground">—</div>
@@ -611,10 +616,10 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
         setCmArtist(artistData || null);
         setSpotifyData(spotify || null);
         if (artistData?.id) {
-           const tracks = await fetchChartmetricArtistTracks(artistData.id);
-           if (mounted) setTopTracks(tracks.slice(0, 10));
+          const tracks = await fetchChartmetricArtistTracks(artistData.id);
+          if (mounted) setTopTracks(tracks.slice(0, 10));
         } else {
-           if (mounted) setTopTracks([]);
+          if (mounted) setTopTracks([]);
         }
       } catch {
         if (mounted) {
@@ -655,7 +660,7 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
           <div className="absolute inset-0 w-full h-full" style={{ backgroundColor: artist.color }}></div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-        
+
         <div className="absolute bottom-0 left-0 right-0 p-8 flex items-end justify-between">
           <div>
             <h1 className="text-[72px] font-black text-white leading-none tracking-tight mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -680,11 +685,11 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
 
       <div className="flex-1 overflow-y-auto px-6 pb-8">
         <div className="space-y-8">
-          
+
           {/* Stats Container */}
           <div className="bg-[#f2f4fc] rounded-b-xl p-6 border-x border-b border-border/50">
             <div className="grid grid-cols-12 gap-8">
-              
+
               {/* Streaming stats */}
               <div className="col-span-4">
                 <div className="flex items-center justify-between mb-4">
@@ -693,17 +698,17 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
                     Last 28 days <ChevronDown className="w-4 h-4" />
                   </div>
                 </div>
-                <div className="bg-card rounded-xl p-5 shadow-sm flex items-center justify-between">
+                <div className="bg-card rounded-xl p-5 shadow-sm grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-[12px] text-muted-foreground font-medium mb-1">Monthly listeners</div>
-                    <div className="text-[24px] font-bold text-foreground tracking-tight mb-2">{baseStreams.toLocaleString()}</div>
+                    <div className="text-[12px] text-muted-foreground font-medium mb-1 truncate">Monthly listeners</div>
+                    <div className="text-[24px] font-bold text-foreground tracking-tight mb-2 truncate">{baseStreams.toLocaleString()}</div>
                     <div className="flex items-center gap-1 text-[12px] font-bold text-[#1DB954]">
                       <TrendingUp className="w-3.5 h-3.5" /> 7%
                     </div>
                   </div>
                   <div>
-                    <div className="text-[12px] text-muted-foreground font-medium mb-1">Streams</div>
-                    <div className="text-[24px] font-bold text-foreground tracking-tight mb-2">{(Math.round((cmArtist?.sp_followers || 60797409) * 3.5)).toLocaleString()}</div>
+                    <div className="text-[12px] text-muted-foreground font-medium mb-1 truncate">Streams</div>
+                    <div className="text-[24px] font-bold text-foreground tracking-tight mb-2 truncate">{(Math.round((cmArtist?.sp_followers || 60797409) * 3.5)).toLocaleString()}</div>
                     <div className="flex items-center gap-1 text-[12px] font-bold text-destructive">
                       <TrendingDown className="w-3.5 h-3.5" /> -1%
                     </div>
@@ -756,7 +761,7 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
             {/* Promo Cards Column */}
             <div className="col-span-8">
               <div className="grid grid-cols-2 gap-x-6 gap-y-10">
-                
+
                 {/* Loud & Clear */}
                 <div className="group cursor-pointer">
                   <div className="aspect-[16/9] bg-[#e4e5f0] rounded-sm mb-4 overflow-hidden relative flex flex-col items-center justify-center p-6">
@@ -798,7 +803,7 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
                     <div className="absolute inset-0 bg-gradient-to-tr from-[#00d0ff]/20 to-transparent"></div>
                     <div className="w-48 h-48 rounded-full bg-[#1db954] absolute -left-8 -top-8 shadow-2xl mix-blend-screen opacity-90"></div>
                     <div className="w-56 h-56 rounded-full bg-[#d015ff] absolute -right-4 -bottom-12 shadow-2xl mix-blend-screen opacity-90"></div>
-                    
+
                     {/* Audience bubbles */}
                     <div className="absolute top-8 right-8 w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20"><Users className="w-5 h-5 text-white" /></div>
                     <div className="absolute bottom-6 left-6 w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20"><Users className="w-6 h-6 text-white" /></div>
@@ -829,16 +834,16 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
 
             {/* Top Songs & Playlists Column */}
             <div className="col-span-4 pl-4">
-              
+
               <div className="mb-12">
                 <div className="flex items-end justify-between mb-4 border-b border-border pb-2">
                   <div>
                     <h3 className="text-[15px] font-bold text-foreground">Your top songs</h3>
                     <div className="text-[12px] text-muted-foreground mt-0.5">Last 7 days</div>
                   </div>
-                  <div className="text-[12px] font-bold text-foreground text-right">Streams<br/><span className="text-muted-foreground font-normal">6/11 – 6/17</span></div>
+                  <div className="text-[12px] font-bold text-foreground text-right">Streams<br /><span className="text-muted-foreground font-normal">6/11 – 6/17</span></div>
                 </div>
-                
+
                 <div className="space-y-4 mb-4">
                   {(topTracks.length ? topTracks.slice(0, 3) : [
                     { name: "Santa", cm_statistics: { sp_streams: 3046216 }, image_url: null },
@@ -865,7 +870,7 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
                     </div>
                   ))}
                 </div>
-                
+
                 <div className="text-[13px] font-bold text-muted-foreground flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors">
                   See songs <ArrowRight className="w-3.5 h-3.5" />
                 </div>
@@ -877,9 +882,9 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
                     <h3 className="text-[15px] font-bold text-foreground">Your top playlists</h3>
                     <div className="text-[12px] text-muted-foreground mt-0.5">Last 7 days</div>
                   </div>
-                  <div className="text-[12px] font-bold text-foreground text-right">Streams<br/><span className="text-muted-foreground font-normal">6/11 – 6/17</span></div>
+                  <div className="text-[12px] font-bold text-foreground text-right">Streams<br /><span className="text-muted-foreground font-normal">6/11 – 6/17</span></div>
                 </div>
-                
+
                 <div className="space-y-4">
                   {[
                     { name: "Radio", streams: 3514527, color: "#8EBEFF" },
@@ -924,7 +929,7 @@ function ArtistsView({ activeArtist, setActiveArtist, rosterItems }: { activeArt
           <button className="text-[14px] font-bold text-foreground border-b-2 border-[#4100F5] pb-2">Artists</button>
           <button className="text-[14px] font-bold text-muted-foreground hover:text-foreground pb-2 transition-colors">Releases</button>
         </div>
-        
+
         <h1 className="text-[36px] font-black text-foreground mb-8 tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           Welcome back, here's your overview
         </h1>
@@ -975,7 +980,7 @@ function ArtistsView({ activeArtist, setActiveArtist, rosterItems }: { activeArt
           <div className="col-span-3">Streams</div>
           <div className="col-span-4 flex items-center gap-1 justify-end">Release <ChevronUp className="w-3.5 h-3.5" /></div>
         </div>
-        
+
         <div className="pb-10">
           {filtered.map(artist => (
             <button
@@ -1008,7 +1013,89 @@ function ArtistsView({ activeArtist, setActiveArtist, rosterItems }: { activeArt
 }
 
 // ─── Music View ───────────────────────────────────────────────────────────────
-function MusicView({ artistName }: { artistName?: string }) {
+function MusicView({ artist }: { artist?: Artist }) {
+  const resolvedArtist: Artist = artist || roster[0];
+  const [tracks, setTracks] = useState<any[]>([]);
+  const [playlists, setPlaylists] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"releases" | "songs" | "playlists">("releases");
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      if (!resolvedArtist?.name) return;
+      setLoading(true);
+      try {
+        const fallbackTracks = songs
+          .filter(song => song.artist?.toLowerCase().includes(resolvedArtist.name.toLowerCase()))
+          .map((song, index) => {
+            const popularity = song.popularity ?? song.trend ?? 0;
+            const streams = Math.round(popularity * 1254302);
+            return {
+              id: song.id,
+              name: song.title,
+              album: song.album,
+              release_date: song.released,
+              track_number: index + 1,
+              popularity,
+              duration_ms: song.duration_ms,
+              explicit: song.explicit,
+              preview_url: song.preview_url,
+              external_url: song.spotify_url,
+              artists: [song.artist],
+              image_url: null,
+              type: song.type?.toLowerCase() || 'track',
+              cm_statistics: {
+                sp_streams: streams,
+                sp_listeners: Math.round(streams * 0.48),
+                sp_saves: Math.round(streams * 0.08),
+                sp_playlists: Math.round(popularity * 18),
+              },
+            };
+          });
+
+        const [catalogData, playlistsData] = await Promise.all([
+          resolvedArtist.spotify_id
+            ? fetchSpotifyArtistCatalogById(resolvedArtist.spotify_id).catch(() => null)
+            : fetchSpotifyArtistCatalog(resolvedArtist.name).catch(() => null),
+          fetchSpotifyArtistPlaylists(resolvedArtist.name).catch(() => [])
+        ]);
+        if (mounted) {
+          setTracks(catalogData?.tracks?.length ? catalogData.tracks : fallbackTracks);
+          if (playlistsData) {
+            setPlaylists(playlistsData);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load artist catalog in MusicView:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, [resolvedArtist.name, resolvedArtist.spotify_id]);
+
+  const filteredTracks = tracks.filter(track =>
+    track.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    track.album?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Sorting logic:
+  // - "releases": recent songs that just dropped (newest to oldest) -> release_date desc
+  // - "songs": old songs first to recent -> release_date asc
+  const displayedTracks = [...filteredTracks].sort((a, b) => {
+    const dateA = a.release_date || '';
+    const dateB = b.release_date || '';
+    if (dateA === dateB) return 0;
+    if (activeTab === "releases") {
+      return dateA > dateB ? -1 : 1;
+    } else {
+      return dateA < dateB ? -1 : 1;
+    }
+  });
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white">
       {/* Top Header */}
@@ -1030,94 +1117,142 @@ function MusicView({ artistName }: { artistName?: string }) {
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs (Upcoming has been removed!) */}
         <div className="flex gap-6 border-b border-border/50 mb-6">
-          <button className="text-[14px] font-bold text-foreground border-b-2 border-[#4100F5] pb-2">Releases</button>
-          <button className="text-[14px] font-bold text-muted-foreground hover:text-foreground pb-2 transition-colors">Songs</button>
-          <button className="text-[14px] font-bold text-muted-foreground hover:text-foreground pb-2 transition-colors">Playlists</button>
-          <button className="text-[14px] font-bold text-muted-foreground hover:text-foreground pb-2 transition-colors">Upcoming</button>
+          <button
+            onClick={() => setActiveTab("releases")}
+            className={`text-[14px] font-bold pb-2 transition-all ${activeTab === "releases"
+                ? "text-foreground border-b-2 border-[#4100F5]"
+                : "text-muted-foreground hover:text-foreground"
+              }`}
+          >
+            Releases
+          </button>
+          <button
+            onClick={() => setActiveTab("songs")}
+            className={`text-[14px] font-bold pb-2 transition-all ${activeTab === "songs"
+                ? "text-foreground border-b-2 border-[#4100F5]"
+                : "text-muted-foreground hover:text-foreground"
+              }`}
+          >
+            Songs
+          </button>
+          <button
+            onClick={() => setActiveTab("playlists")}
+            className={`text-[14px] font-bold pb-2 transition-all ${activeTab === "playlists"
+                ? "text-foreground border-b-2 border-[#4100F5]"
+                : "text-muted-foreground hover:text-foreground"
+              }`}
+          >
+            Playlists
+          </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-10">
-        {/* Search */}
-        <div className="relative mb-6 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            placeholder="Search"
-            className="w-full pl-10 pr-4 py-2.5 text-[14px] font-medium bg-white border border-border rounded-md outline-none focus:border-foreground/30 text-foreground placeholder:text-muted-foreground transition-colors shadow-sm"
-          />
-        </div>
+        {activeTab !== "playlists" && (
+          <>
+            {/* Search */}
+            <div className="relative mb-6 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search songs or albums"
+                className="w-full pl-10 pr-4 py-2.5 text-[14px] font-medium bg-white border border-border rounded-md outline-none focus:border-foreground/30 text-foreground placeholder:text-muted-foreground transition-colors shadow-sm"
+              />
+            </div>
 
-        {/* Table list */}
-        <div className="grid grid-cols-12 py-3 border-b border-border text-[12px] font-bold text-foreground">
-          <div className="col-span-5 flex items-center gap-1">Releases</div>
-          <div className="col-span-2">Streams</div>
-          <div className="col-span-2">Listeners</div>
-          <div className="col-span-1">Saves</div>
-          <div className="col-span-2 flex items-center gap-1 justify-end cursor-pointer"><ChevronDown className="w-3.5 h-3.5" /> First released</div>
-        </div>
-        
-        <div className="pb-10">
-          {/* Main Release Row */}
-          <div className="w-full grid grid-cols-12 py-4 border-b border-border/50 items-center text-left">
-            <div className="col-span-5 flex items-center gap-4">
-              <div className="w-14 h-14 bg-muted rounded shadow-sm overflow-hidden flex-shrink-0">
-                <div className="w-full h-full opacity-80" style={{ backgroundColor: artist.color }}></div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[14px] font-bold text-foreground">Many People</div>
-                <div className="text-[13px] text-muted-foreground">Single</div>
-              </div>
-              <div className="pr-4">
-                <Info className="w-4 h-4 text-muted-foreground" />
+            {/* Table list */}
+            <div className="grid grid-cols-12 py-3 border-b border-border text-[12px] font-bold text-foreground">
+              <div className="col-span-5 flex items-center gap-1">Releases</div>
+              <div className="col-span-2">Streams</div>
+              <div className="col-span-2">Listeners</div>
+              <div className="col-span-1">Saves</div>
+              <div className="col-span-2 flex items-center gap-1 justify-end cursor-pointer">
+                <ChevronDown className="w-3.5 h-3.5" /> {activeTab === "releases" ? "Newest first" : "Oldest first"}
               </div>
             </div>
-            <div className="col-span-2 text-[14px] text-muted-foreground font-medium">418,589</div>
-            <div className="col-span-2 text-[14px] text-muted-foreground font-medium">—</div>
-            <div className="col-span-1 text-[14px] text-muted-foreground font-medium">—</div>
-            <div className="col-span-2 text-[14px] text-muted-foreground font-medium flex items-center justify-end gap-2">
-              2026 <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </div>
-          </div>
 
-          {/* Subheader: 1 Many People */}
-          <div className="w-full grid grid-cols-12 py-3 border-b border-border/50 items-center text-left">
-            <div className="col-span-12 flex items-center gap-3 pl-4">
-              <div className="text-[13px] font-bold text-foreground">1</div>
-              <div className="text-[14px] font-bold text-foreground">Many People</div>
+            <div className="pb-10 divide-y divide-border/30">
+              {loading ? (
+                <div className="py-20 text-center text-muted-foreground text-[14px]">Loading releases...</div>
+              ) : displayedTracks.length === 0 ? (
+                <div className="py-20 text-center text-muted-foreground text-[14px]">No releases found.</div>
+              ) : (
+                displayedTracks.map((track, i) => (
+                  <div key={track.id || i} className="w-full grid grid-cols-12 py-4 border-b border-border/50 items-center text-left hover:bg-muted/10 transition-colors">
+                    <div className="col-span-5 flex items-center gap-4">
+                      <div className="w-14 h-14 bg-muted rounded shadow-sm overflow-hidden flex-shrink-0 relative">
+                        {track.image_url ? (
+                          <img src={track.image_url} alt={track.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full opacity-80" style={{ backgroundColor: resolvedArtist.color }}></div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[14px] font-bold text-foreground truncate">{track.name}</div>
+                        <div className="text-[13px] text-muted-foreground truncate">{track.album || 'Single'}</div>
+                      </div>
+                      <div className="pr-4">
+                        <Info className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                    <div className="col-span-2 text-[14px] text-muted-foreground font-medium">
+                      {track.cm_statistics?.sp_streams ? track.cm_statistics.sp_streams.toLocaleString() : '—'}
+                    </div>
+                    <div className="col-span-2 text-[14px] text-muted-foreground font-medium">
+                      {track.cm_statistics?.sp_listeners ? track.cm_statistics.sp_listeners.toLocaleString() : '—'}
+                    </div>
+                    <div className="col-span-1 text-[14px] text-muted-foreground font-medium">
+                      {track.cm_statistics?.sp_saves ? track.cm_statistics.sp_saves.toLocaleString() : '—'}
+                    </div>
+                    <div className="col-span-2 text-[14px] text-muted-foreground font-medium flex items-center justify-end gap-2">
+                      {track.release_date ? track.release_date.split('-')[0] : '—'} <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          </div>
+          </>
+        )}
 
-          {/* Audio Row */}
-          <div className="w-full grid grid-cols-12 py-4 border-b border-border/50 items-center text-left hover:bg-muted/20 transition-colors cursor-pointer group">
-            <div className="col-span-5 flex items-center gap-3 pl-12">
-              <Music className="w-4 h-4 text-muted-foreground" />
-              <div className="text-[13px] font-bold text-foreground group-hover:underline">Many People</div>
-            </div>
-            <div className="col-span-2 text-[13px] text-muted-foreground font-medium">416,633</div>
-            <div className="col-span-2 text-[13px] text-muted-foreground font-medium">209,484</div>
-            <div className="col-span-1 text-[13px] text-muted-foreground font-medium">22,145</div>
-            <div className="col-span-2 text-[13px] text-muted-foreground font-medium flex items-center justify-end gap-2">
-              6/5/2026 <ChevronRight className="w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
+        {activeTab === "playlists" && (
+          <div className="pt-4">
+            {loading ? (
+              <div className="py-20 text-center text-muted-foreground text-[14px]">Loading playlists...</div>
+            ) : playlists.length === 0 ? (
+              <div className="py-20 text-center text-muted-foreground text-[14px]">No playlists found for this artist.</div>
+            ) : (
+              <div className="grid grid-cols-4 gap-6 pb-10">
+                {playlists.map((pl, i) => (
+                  <a
+                    href={pl.spotify_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    key={pl.id || i}
+                    className="group flex flex-col bg-card border border-border/50 rounded-xl p-4 shadow-sm hover:shadow-md transition-all"
+                  >
+                    <div className="w-full aspect-square bg-muted rounded-lg overflow-hidden mb-4 relative shadow-inner">
+                      {pl.image_url ? (
+                        <img src={pl.image_url} alt={pl.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground" style={{ backgroundColor: resolvedArtist.color }}>
+                          <List className="w-8 h-8 text-white" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[14px] font-bold text-foreground truncate group-hover:underline">{pl.name}</div>
+                    <div className="text-[12px] text-muted-foreground mt-1 flex justify-between items-center">
+                      <span>by {pl.owner}</span>
+                      <span className="bg-muted px-2 py-0.5 rounded text-[10px] font-bold">{pl.tracks_count} tracks</span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
-
-          {/* Video Row */}
-          <div className="w-full grid grid-cols-12 py-4 border-b border-border/50 items-center text-left hover:bg-muted/20 transition-colors cursor-pointer group">
-            <div className="col-span-5 flex items-center gap-3 pl-12">
-              <PlaySquare className="w-4 h-4 text-muted-foreground" />
-              <div className="text-[13px] font-bold text-foreground group-hover:underline">Many People</div>
-            </div>
-            <div className="col-span-2 text-[13px] text-muted-foreground font-medium">1,956</div>
-            <div className="col-span-2 text-[13px] text-muted-foreground font-medium">1,444</div>
-            <div className="col-span-1 text-[13px] text-muted-foreground font-medium">—</div>
-            <div className="col-span-2 text-[13px] text-muted-foreground font-medium flex items-center justify-end gap-2">
-              6/11/2026 <ChevronRight className="w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-          </div>
-          
-        </div>
+        )}
       </div>
     </div>
   );
@@ -1279,7 +1414,7 @@ function AudienceView() {
               </div>
             </div>
           </div>
-          
+
           <div className="pb-10 flex items-center gap-4">
             <span className="text-[14px] font-bold text-foreground">Segmentation</span>
             <button className="px-4 py-1.5 bg-muted rounded-full text-[13px] font-bold text-foreground hover:bg-muted/80 transition-colors">Source of streams</button>
@@ -1338,14 +1473,13 @@ function AIAssistantView() {
                     <Bot className="w-3.5 h-3.5 text-card" />
                   </div>
                 )}
-                <div className={`max-w-[78%] rounded-xl px-4 py-3 text-[13px] leading-relaxed ${
-                  msg.role === "user"
+                <div className={`max-w-[78%] rounded-xl px-4 py-3 text-[13px] leading-relaxed ${msg.role === "user"
                     ? "bg-foreground text-card rounded-tr-sm"
                     : "bg-card border border-border rounded-tl-sm"
-                }`}>
+                  }`}>
                   {msg.loading ? (
                     <div className="flex gap-1 items-center h-4">
-                      {[0,1,2].map(j => <div key={j} className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: `${j * 0.15}s` }} />)}
+                      {[0, 1, 2].map(j => <div key={j} className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: `${j * 0.15}s` }} />)}
                     </div>
                   ) : (
                     <div className="whitespace-pre-line text-current" dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
@@ -1581,7 +1715,7 @@ function SocialListeningView() {
                           <p className="text-[12px] text-muted-foreground">Last 7 days — all platforms</p>
                         </div>
                         <div className="flex gap-1">
-                          {["24h","7d","28d","90d"].map(r => (
+                          {["24h", "7d", "28d", "90d"].map(r => (
                             <button key={r} onClick={() => setTimeRange(r)} className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${timeRange === r ? "bg-foreground text-card" : "text-muted-foreground hover:bg-muted"}`}>{r}</button>
                           ))}
                         </div>
@@ -1693,7 +1827,7 @@ function SocialListeningView() {
                       <p className="text-[12px] text-muted-foreground">Mention volume over time — all platforms combined</p>
                     </div>
                     <div className="flex gap-1">
-                      {["24h","7d","28d","90d"].map(r => (
+                      {["24h", "7d", "28d", "90d"].map(r => (
                         <button key={r} onClick={() => setTimeRange(r)} className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${timeRange === r ? "bg-foreground text-card" : "text-muted-foreground hover:bg-muted"}`}>{r}</button>
                       ))}
                     </div>
@@ -1818,12 +1952,12 @@ function SocialListeningView() {
                     <h3 className="text-[13px] font-bold text-foreground mb-3">Top Hashtags</h3>
                     {[
                       { tag: "#TornadoChallenge", uses: "284K", growth: "+410%" },
-                      { tag: "#AyraStarr",        uses: "198K", growth: "+28%" },
-                      { tag: "#Tornado",           uses: "142K", growth: "+184%" },
-                      { tag: "#TYITY1",            uses: "98K",  growth: "+62%" },
-                      { tag: "#Afrobeats",         uses: "84K",  growth: "+14%" },
-                      { tag: "#TornadoDance",      uses: "62K",  growth: "+890%" },
-                      { tag: "#NigeriaMusic",      uses: "48K",  growth: "+18%" },
+                      { tag: "#AyraStarr", uses: "198K", growth: "+28%" },
+                      { tag: "#Tornado", uses: "142K", growth: "+184%" },
+                      { tag: "#TYITY1", uses: "98K", growth: "+62%" },
+                      { tag: "#Afrobeats", uses: "84K", growth: "+14%" },
+                      { tag: "#TornadoDance", uses: "62K", growth: "+890%" },
+                      { tag: "#NigeriaMusic", uses: "48K", growth: "+18%" },
                     ].map(({ tag, uses, growth }) => (
                       <div key={tag} className="flex items-center justify-between py-2 border-b border-border last:border-b-0">
                         <span className="text-[13px] font-semibold text-foreground">{tag}</span>
@@ -2077,7 +2211,7 @@ function ReleaseCalendarView() {
     <div className="flex-1 flex flex-col overflow-hidden">
       <SectionHeader title="Release Calendar" subtitle="June 2026" actions={
         <div className="flex gap-1">
-          {["Month","Week","Timeline"].map(v => (
+          {["Month", "Week", "Timeline"].map(v => (
             <button key={v} className={`px-3 py-1.5 rounded-md text-[12px] font-medium ${v === "Month" ? "bg-foreground text-card" : "text-muted-foreground hover:bg-muted"}`}>{v}</button>
           ))}
         </div>
@@ -2085,7 +2219,7 @@ function ReleaseCalendarView() {
       <div className="flex-1 overflow-y-auto bg-background p-6">
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="grid grid-cols-7 border-b border-border">
-            {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
+            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
               <div key={d} className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-center border-r border-border last:border-r-0">{d}</div>
             ))}
           </div>
@@ -2134,7 +2268,7 @@ function ReportsView() {
               <h3 className="text-[13px] font-bold text-foreground mb-1">{label}</h3>
               <p className="text-[12px] text-muted-foreground mb-4">{desc}</p>
               <div className="flex gap-1.5">
-                {["PDF","PowerPoint","Excel","CSV"].map(fmt => (
+                {["PDF", "PowerPoint", "Excel", "CSV"].map(fmt => (
                   <button key={fmt} className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground px-2 py-1 rounded-md bg-muted hover:bg-secondary transition-all uppercase tracking-wide">
                     <Download className="w-3 h-3" />{fmt}
                   </button>
@@ -2221,7 +2355,7 @@ export default function App() {
           return match || (data.roster as Artist[])[0];
         });
       }
-    }).catch(() => {});
+    }).catch(() => { });
     return () => { mounted = false; };
   }, []);
 
@@ -2241,7 +2375,7 @@ export default function App() {
     switch (activeView) {
       case "dashboard": return <DashboardView onSelectArtist={handleSelectArtist} />;
       case "artists": return <ArtistProfileView artist={activeArtist} />;
-      case "music": return <MusicView artistName={activeArtist.name} />;
+      case "music": return <MusicView artist={activeArtist} />;
       case "audience": return <AudienceView />;
       case "ai": return <AIAssistantView />;
       case "social": return <SocialListeningView />;

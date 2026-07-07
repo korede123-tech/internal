@@ -511,6 +511,7 @@ export interface Song {
   preview_url?: string | null;
   spotify_url?: string;
   duration_ms?: number;
+  explicit?: boolean;
 }
 
 export interface Kpi {

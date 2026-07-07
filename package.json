@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/generate-live-data.mjs && vite build",
-    "dev": "node scripts/generate-live-data.mjs && node scripts/dev.mjs",
+    "dev": "node scripts/dev.mjs",
     "dev:vite": "vite",
     "start:api": "node scripts/chartmetric-proxy.mjs",
     "start:chartmetric-proxy": "node scripts/chartmetric-proxy.mjs",
