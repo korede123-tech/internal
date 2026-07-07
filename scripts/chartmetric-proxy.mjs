@@ -21,6 +21,7 @@ const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 const COHERE_API_KEY = process.env.COHERE_API_KEY;
 const XPOZ_API_KEY = process.env.XPOZ_API_KEY;
+const RAPIDAPI_SPOTIFY_KEY = process.env.RAPIDAPI_SPOTIFY_KEY;
 
 const TRACKED_ARTISTS = [
   'Rema', 'Ayra Starr', 'Boy Spyce', 'LOVN', 'CupidSZN',
@@ -32,6 +33,43 @@ let cachedToken = null;
 let tokenExpiresAt = 0;
 
 const artistMap = new Map();
+const trackStreamsCache = new Map();
+
+async function getRapidAPIStreamCount(trackName, artistName, apiKey) {
+  if (!apiKey) return null;
+  
+  const cacheKey = `${artistName.toLowerCase().trim()}-${trackName.toLowerCase().trim()}`;
+  if (trackStreamsCache.has(cacheKey)) {
+    return trackStreamsCache.get(cacheKey);
+  }
+
+  try {
+    const url = 'https://spotify-statistics-and-stream-count.p.rapidapi.com/search';
+    const query = `${trackName} ${artistName}`;
+    const params = new URLSearchParams({ q: query, type: 'track', limit: '1' });
+    
+    const res = await fetch(`${url}?${params.toString()}`, {
+      headers: {
+        'x-rapidapi-key': apiKey,
+        'x-rapidapi-host': 'spotify-statistics-and-stream-count.p.rapidapi.com'
+      },
+      signal: AbortSignal.timeout(2000)
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.tracks && data.tracks.length > 0) {
+      const streamCount = data.tracks[0].stream_count;
+      if (typeof streamCount === 'number') {
+        trackStreamsCache.set(cacheKey, streamCount);
+        return streamCount;
+      }
+    }
+  } catch (err) {
+    console.warn(`RapidAPI streams fetch failed for ${trackName}:`, err.message || err);
+  }
+  return null;
+}
 
 async function getChartmetricToken() {
   if (cachedToken && Date.now() < tokenExpiresAt - 30000) return cachedToken;
@@ -86,6 +124,24 @@ async function spotifyCatalogHandler(req, res) {
       const catalog = id
         ? await fetchArtistCatalogById(String(id), SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
         : await fetchArtistCatalog(String(name), SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET);
+        
+      // Merge RapidAPI real stream counts for top tracks
+      const artistName = catalog?.artist?.name || name || 'Rema';
+      if (RAPIDAPI_SPOTIFY_KEY && catalog?.tracks) {
+        const topTracksToFetch = catalog.tracks.slice(0, 8);
+        await Promise.all(topTracksToFetch.map(async (track) => {
+          const realStreams = await getRapidAPIStreamCount(track.name, artistName, RAPIDAPI_SPOTIFY_KEY);
+          if (realStreams != null) {
+            track.cm_statistics = {
+              ...track.cm_statistics,
+              sp_streams: realStreams,
+              sp_listeners: Math.round(realStreams * 0.48),
+              sp_saves: Math.round(realStreams * 0.08)
+            };
+          }
+        }));
+      }
+
       artistMap.set(cacheKey, catalog);
       return res.json(catalog);
     } catch (err) {
@@ -432,9 +488,21 @@ app.get('/cm-api/artist/:id/tracks', async (req, res) => {
     }
 
     // Map to legacy Chartmetric format expected by frontend
-    const mappedTracks = (spotifyTracks.tracks || []).map((track, index) => {
+    const artistName = mapped?.name || 'Rema';
+    const mappedTracks = await Promise.all((spotifyTracks.tracks || []).map(async (track, index) => {
       const pop = track.popularity || 50;
-      const streams = Math.round(pop * 1254302 - (index * 832104));
+      let streams = Math.round(pop * 1254302 - (index * 832104));
+      
+      const cacheKey = `${artistName.toLowerCase().trim()}-${track.name.toLowerCase().trim()}`;
+      if (trackStreamsCache.has(cacheKey)) {
+        streams = trackStreamsCache.get(cacheKey);
+      } else if (RAPIDAPI_SPOTIFY_KEY && index < 5) {
+        const realStreams = await getRapidAPIStreamCount(track.name, artistName, RAPIDAPI_SPOTIFY_KEY);
+        if (realStreams != null) {
+          streams = realStreams;
+        }
+      }
+
       return {
         name: track.name,
         image_url: track.album?.images?.[0]?.url || null,
@@ -442,7 +510,7 @@ app.get('/cm-api/artist/:id/tracks', async (req, res) => {
           sp_streams: streams
         }
       };
-    });
+    }));
 
     res.json({ obj: mappedTracks });
   } catch (e) {
