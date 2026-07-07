@@ -828,7 +828,7 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
                   </div>
                   <div>
                     <div className="text-[12px] text-muted-foreground font-medium mb-1 truncate">Streams</div>
-                    <div className="text-[24px] font-bold text-foreground tracking-tight mb-2 truncate">{(Math.round((cmArtist?.sp_followers || 60797409) * 3.5)).toLocaleString()}</div>
+                    <div className="text-[24px] font-bold text-foreground tracking-tight mb-2 truncate">{(cmArtist?.total_streams || Math.round((cmArtist?.sp_followers || 60797409) * 3.5)).toLocaleString()}</div>
                     <div className="flex items-center gap-1 text-[12px] font-bold text-destructive">
                       <TrendingDown className="w-3.5 h-3.5" /> -1%
                     </div>

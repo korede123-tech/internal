@@ -96,6 +96,39 @@ async function getRapidAPIStreamCount(trackName, artistName, apiKey) {
   return null;
 }
 
+async function getRapidAPIArtistStatsById(spotifyId, apiKey) {
+  if (!apiKey || !spotifyId) return null;
+
+  const cacheKey = `artist-stats-id-${spotifyId}`;
+  if (trackStreamsCache.has(cacheKey)) {
+    return trackStreamsCache.get(cacheKey);
+  }
+
+  try {
+    const url = 'https://spotify-statistics-and-stream-count.p.rapidapi.com/artist';
+    const artistUrl = `https://open.spotify.com/artist/${spotifyId}`;
+    const params = new URLSearchParams({ url: artistUrl });
+    
+    const res = await fetch(`${url}?${params.toString()}`, {
+      headers: {
+        'x-rapidapi-key': apiKey,
+        'x-rapidapi-host': 'spotify-statistics-and-stream-count.p.rapidapi.com'
+      },
+      signal: AbortSignal.timeout(2000)
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data) {
+      trackStreamsCache.set(cacheKey, data);
+      return data;
+    }
+  } catch (err) {
+    console.warn(`RapidAPI artist stats fetch failed for ID ${spotifyId}:`, err.message || err);
+  }
+  return null;
+}
+
 async function getChartmetricToken() {
   if (cachedToken && Date.now() < tokenExpiresAt - 30000) return cachedToken;
   if (!REFRESH) return null;
@@ -467,6 +500,29 @@ app.get('/cm-api/search', async (req, res) => {
     }
 
     // Map to legacy Chartmetric REST API format expected by frontend
+    let monthlyListeners = spotifyArtist 
+      ? Math.round(spotifyArtist.popularity * 200000) 
+      : (artistData.social_engagement?.spotify?.monthly_listeners || 0);
+    let totalStreams = spotifyArtist
+      ? Math.round(spotifyArtist.popularity * 1254302 * 8)
+      : 0;
+
+    if (RAPIDAPI_SPOTIFY_KEY && spotifyArtist?.id && !spotifyArtist.id.startsWith('mock-')) {
+      try {
+        const stats = await getRapidAPIArtistStatsById(spotifyArtist.id, RAPIDAPI_SPOTIFY_KEY);
+        if (stats) {
+          if (stats.monthly_listeners || stats.monthlyListeners) {
+            monthlyListeners = stats.monthly_listeners || stats.monthlyListeners;
+          }
+          if (stats.stream_count || stats.total_streams || stats.totalStreams || stats.streams) {
+            totalStreams = stats.stream_count || stats.total_streams || stats.totalStreams || stats.streams;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch RapidAPI stats in search:', err.message || err);
+      }
+    }
+
     res.json({
       obj: {
         artists: [
@@ -475,9 +531,8 @@ app.get('/cm-api/search', async (req, res) => {
             name: spotifyArtist?.name || artistData.keyword || q,
             image_url: spotifyArtist?.images?.[0]?.url || artistData.bio?.imageUrl || null,
             sp_followers: spotifyArtist?.followers?.total || artistData.social_engagement?.spotify?.followers || 0,
-            sp_monthly_listeners: spotifyArtist 
-              ? Math.round(spotifyArtist.popularity * 200000) 
-              : (artistData.social_engagement?.spotify?.monthly_listeners || 0),
+            sp_monthly_listeners: monthlyListeners,
+            total_streams: totalStreams,
             cm_artist_score: spotifyArtist 
               ? Math.round(spotifyArtist.popularity * 8.5) 
               : (artistData.rankTrends?.chartmetric_score || 0)
