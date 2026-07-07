@@ -758,7 +758,7 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
   };
 
   const fullMonthlyListeners = cmArtist?.sp_monthly_listeners || 16958180;
-  const fullTotalStreams = cmArtist?.total_streams || Math.round((cmArtist?.sp_followers || 60797409) * 3.5);
+  const fullTotalStreams = cmArtist?.total_streams || Math.round(fullMonthlyListeners * 115);
 
   const baseStreams = timeRange === "28d"
     ? fullMonthlyListeners
@@ -1215,11 +1215,14 @@ function MusicView({ artist, onSelectTrack }: { artist?: Artist; onSelectTrack?:
       if (!resolvedArtist?.name) return;
       setLoading(true);
       try {
+        const followersCount = resolvedArtist.followers || 1000000;
         const fallbackTracks = songs
           .filter(song => song.artist?.toLowerCase().includes(resolvedArtist.name.toLowerCase()))
           .map((song, index) => {
             const popularity = song.popularity ?? song.trend ?? 0;
-            const streams = Math.round(1000 * Math.exp(0.1455 * (popularity || 1)));
+            const expFactor = Math.exp(((popularity || 1) - 50) * 0.12);
+            let streams = Math.round(followersCount * expFactor * 0.3);
+            streams = Math.max((popularity || 1) * 5000, streams);
             return {
               id: song.id,
               name: song.title,
@@ -1236,9 +1239,9 @@ function MusicView({ artist, onSelectTrack }: { artist?: Artist; onSelectTrack?:
               type: song.type?.toLowerCase() || 'track',
               cm_statistics: {
                 sp_streams: streams,
-                sp_listeners: Math.round(streams * 0.48),
-                sp_saves: Math.round(streams * 0.08),
-                sp_playlists: Math.round(popularity * 18),
+                sp_listeners: Math.round(streams / 1.27),
+                sp_saves: Math.round(streams * 0.06),
+                sp_playlists: Math.round((popularity || 1) * 18),
               },
             };
           });
@@ -2407,10 +2410,12 @@ function SocialListeningView() {
                     <p className="text-[12px] text-muted-foreground mb-4">How conversation volume translates into streaming</p>
                     <div className="grid grid-cols-4 gap-3">
                       {[
-                        { label: "Spotify Streams", value: "48M", pct: 62 }, { label: "Apple Music", value: "12M", pct: 28 },
-                        { label: "YouTube Views", value: "24M", pct: 44 }, { label: "TikTok Creations", value: "284K", pct: 91 },
-                        { label: "TikTok Mentions", value: "1.7M", pct: 88 }, { label: "Instagram Mentions", value: "420K", pct: 54 },
-                        { label: "X Mentions", value: "142K", pct: 38 }, { label: "News Mentions", value: "840", pct: 22 },
+                        { label: "Spotify Streams", value: "48M", pct: 62 },
+                        { label: "TikTok Creations", value: "284K", pct: 91 },
+                        { label: "TikTok Mentions", value: "1.7M", pct: 88 },
+                        { label: "Instagram Mentions", value: "420K", pct: 54 },
+                        { label: "X Mentions", value: "142K", pct: 38 },
+                        { label: "News Mentions", value: "840", pct: 22 },
                       ].map(({ label, value, pct }) => (
                         <div key={label} className="border border-border rounded-lg p-3">
                           <div className="text-[10px] text-muted-foreground mb-1">{label}</div>
@@ -2935,7 +2940,7 @@ function SettingsView() {
       <div className="flex-1 overflow-y-auto bg-background p-6">
         <div className="max-w-2xl space-y-4">
           {[
-            { title: "API Integrations", items: ["Chartmetric API", "XPOZ Social API", "Spotify API", "Apple Music API", "Audiomack API"] },
+            { title: "API Integrations", items: ["Chartmetric API", "XPOZ Social API", "Spotify API"] },
             { title: "Team & Access", items: ["Artist Managers", "Marketing Team", "Digital Team", "Label Leadership"] },
             { title: "Notifications", items: ["Streaming Milestones", "Campaign Deadlines", "Viral Alerts", "AI Recommendations"] },
           ].map(section => (
