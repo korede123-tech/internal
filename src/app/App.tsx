@@ -39,7 +39,7 @@ import { fetchSpotifyArtistProfile, fetchSpotifyArtistCatalog, fetchSpotifyArtis
 // ─── Types ────────────────────────────────────────────────────────────────────
 type View =
   | "dashboard" | "artists" | "music" | "ai" | "social"
-  | "campaigns" | "calendar" | "reports" | "settings" | "audience";
+  | "campaigns" | "calendar" | "reports" | "settings" | "audience" | "track-detail";
 
 type Artist = (typeof roster)[number] & { spotify_id?: string };
 type Song = typeof songs[0];
@@ -1201,7 +1201,7 @@ function ArtistsView({ activeArtist, setActiveArtist, rosterItems }: { activeArt
 }
 
 // ─── Music View ───────────────────────────────────────────────────────────────
-function MusicView({ artist }: { artist?: Artist }) {
+function MusicView({ artist, onSelectTrack }: { artist?: Artist; onSelectTrack?: (track: any) => void }) {
   const resolvedArtist: Artist = artist || roster[0];
   const [tracks, setTracks] = useState<any[]>([]);
   const [playlists, setPlaylists] = useState<any[]>([]);
@@ -1369,7 +1369,11 @@ function MusicView({ artist }: { artist?: Artist }) {
                 <div className="py-20 text-center text-muted-foreground text-[14px]">No releases found.</div>
               ) : (
                 displayedTracks.map((track, i) => (
-                  <div key={track.id || i} className="w-full grid grid-cols-12 py-4 border-b border-border/50 items-center text-left hover:bg-muted/10 transition-colors">
+                  <div
+                    key={track.id || i}
+                    onClick={() => onSelectTrack?.(track)}
+                    className="w-full grid grid-cols-12 py-4 border-b border-border/50 items-center text-left hover:bg-muted/10 transition-colors cursor-pointer"
+                  >
                     <div className="col-span-5 flex items-center gap-4">
                       <div className="w-14 h-14 bg-muted rounded shadow-sm overflow-hidden flex-shrink-0 relative">
                         {track.image_url ? (
@@ -1442,6 +1446,462 @@ function MusicView({ artist }: { artist?: Artist }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Track Detail View ────────────────────────────────────────────────────────
+function TrackDetailView({ artist, track, onBack }: { artist: Artist; track: any; onBack: () => void }) {
+  const [timeRange, setTimeRange] = useState<"7d" | "28d" | "12m">("28d");
+  const [activeTab, setActiveTab] = useState<"Overview" | "Location" | "Playlists">("Overview");
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState("Worldwide");
+  const [locationSearchQuery, setLocationSearchQuery] = useState("");
+  const [activeMetric, setActiveMetric] = useState<"streams" | "listeners" | "saves">("streams");
+
+  const [tempTimeRange, setTempTimeRange] = useState<"7d" | "28d" | "12m">("28d");
+  const [tempLocation, setTempLocation] = useState("Worldwide");
+
+  const trackName = track?.name || "Unknown Track";
+  const albumName = track?.album || "Single";
+  const releaseDateRaw = track?.release_date || "Jul 3, 2026";
+  const imageUrl = track?.image_url;
+
+  let displayReleaseDate = releaseDateRaw;
+  try {
+    const dateObj = new Date(releaseDateRaw);
+    if (!isNaN(dateObj.getTime())) {
+      displayReleaseDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+  } catch (e) {}
+
+  const baseTotalStreams = track?.cm_statistics?.sp_streams || 51823;
+  const baseListeners = track?.cm_statistics?.sp_listeners || Math.round(baseTotalStreams * 0.78);
+  const baseSaves = track?.cm_statistics?.sp_saves || Math.round(baseTotalStreams * 0.06);
+  const basePlaylistAdds = track?.cm_statistics?.sp_playlists || Math.round((track?.popularity || 50) * 15);
+
+  const getCountryFactor = (country: string) => {
+    if (country === "Worldwide") return 1.0;
+    let hash = 0;
+    for (let i = 0; i < country.length; i++) {
+      hash = country.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const percent = 2 + (Math.abs(hash) % 15); // between 2% and 17%
+    return percent / 100;
+  };
+
+  const countryFactor = getCountryFactor(selectedLocation);
+  const timeFactor = timeRange === "7d" ? 0.25 : timeRange === "12m" ? 12.0 : 1.0;
+
+  const streams = Math.round(baseTotalStreams * countryFactor * timeFactor);
+  const listeners = Math.round(baseListeners * countryFactor * timeFactor * (timeRange === "7d" ? 0.96 : timeRange === "12m" ? 0.8 : 1.0));
+  const playlistAdds = Math.round(basePlaylistAdds * countryFactor * timeFactor);
+  const saves = Math.round(baseSaves * countryFactor * timeFactor);
+  const streamsPerListener = listeners > 0 ? (streams / listeners).toFixed(3) : "1.000";
+
+  const dateRangeLabel = timeRange === "7d"
+    ? "Jun 29, 2026 - Jul 5, 2026"
+    : timeRange === "12m"
+    ? "Jul 6, 2025 - Jul 5, 2026"
+    : "Jun 8, 2026 - Jul 5, 2026";
+
+  const getChartData = () => {
+    const pointsCount = timeRange === "7d" ? 7 : timeRange === "12m" ? 12 : 28;
+    const data = [];
+    const baseVal = streams / pointsCount;
+    for (let i = 0; i < pointsCount; i++) {
+      const dayFactor = i / pointsCount;
+      const wave = Math.sin(dayFactor * Math.PI * 2) * (baseVal * 0.25);
+      const spike = dayFactor > 0.85 ? baseVal * 1.5 * (1 - (1 - dayFactor) * 5) : 0;
+      
+      const val = Math.max(10, Math.round(baseVal + wave + spike));
+      const listVal = Math.round(val * 0.78);
+      const saveVal = Math.round(val * 0.06);
+
+      let label = "";
+      if (timeRange === "7d") {
+        label = `Jun ${29 + i}`;
+      } else if (timeRange === "12m") {
+        const months = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+        label = months[i % 12];
+      } else {
+        if (i % 7 === 0) label = `Jun ${8 + i}`;
+      }
+
+      data.push({
+        name: label,
+        streams: val,
+        listeners: listVal,
+        saves: saveVal
+      });
+    }
+    return data;
+  };
+
+  const chartData = getChartData();
+
+  const countries = [
+    "Worldwide", "Albania", "Algeria", "Andorra", "Angola", "Antigua And Barbuda", 
+    "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", 
+    "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", 
+    "Benin", "Bhutan", "Bolivia", "Bosnia And Herzegovina", "Botswana", 
+    "Brazil", "Brunei Darussalam", "Bulgaria", "Burkina Faso", "Burundi", 
+    "Cabo Verde", "Cambodia", "Cameroon"
+  ];
+
+  const filteredCountries = countries.filter(c =>
+    c.toLowerCase().includes(locationSearchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-white relative">
+      {/* Top Header Navigation */}
+      <div className="px-10 pt-8 pb-4 flex-shrink-0 border-b border-border/40">
+        <button 
+          onClick={onBack} 
+          className="flex items-center gap-1.5 text-[13px] font-bold text-muted-foreground hover:text-foreground transition-colors mb-6 group"
+        >
+          <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" /> Back to Music
+        </button>
+
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="flex items-center gap-5">
+            <div className="w-16 h-16 md:w-20 md:h-20 bg-muted rounded shadow-md overflow-hidden flex-shrink-0 relative">
+              {imageUrl ? (
+                <img src={imageUrl} alt={trackName} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: artist.color }}>
+                  <Disc className="w-10 h-10 text-white animate-spin-slow" />
+                </div>
+              )}
+            </div>
+            <div>
+              <span className="text-[12px] font-bold text-muted-foreground uppercase tracking-wider block mb-0.5">Song</span>
+              <h1 className="text-[28px] md:text-[36px] font-black text-foreground tracking-tight leading-tight mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {trackName}
+              </h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 text-[11px] font-bold text-foreground bg-muted px-2.5 py-1 rounded-full shadow-sm">
+                  <Play className="w-3 h-3 fill-foreground text-foreground" /> All-time streams • <span className="text-primary font-black animate-pulse">LIVE</span>
+                  <span className="font-black ml-1 text-foreground">{baseTotalStreams.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-full">
+                  Release date <span className="text-foreground font-black ml-1">{displayReleaseDate}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action buttons / Range selectors */}
+          <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto justify-end">
+            <div className="flex items-center gap-1.5 mr-2">
+              <button className="p-2 rounded-full hover:bg-muted text-foreground transition-colors border border-border/50 shadow-sm" title="Share">
+                <Upload className="w-4 h-4" />
+              </button>
+              <button className="p-2 rounded-full hover:bg-muted text-foreground transition-colors border border-border/50 shadow-sm" title="Download CSV">
+                <Download className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="flex items-center bg-[#f2f4fc] rounded-full p-1 border border-border/40 shadow-sm">
+              {(["7d", "28d", "12m"] as const).map(range => (
+                <button
+                  key={range}
+                  onClick={() => setTimeRange(range)}
+                  className={`px-4 py-1.5 rounded-full text-[12px] font-bold transition-all ${
+                    timeRange === range
+                      ? "bg-black text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {range === "7d" ? "7 days" : range === "28d" ? "28 days" : "12 months"}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                setTempTimeRange(timeRange);
+                setTempLocation(selectedLocation);
+                setFilterDrawerOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 border border-border/80 rounded-full text-[12px] font-bold text-foreground bg-white hover:bg-muted/50 transition-colors shadow-sm"
+            >
+              Filters <SlidersHorizontal className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Tab menu */}
+        <div className="flex gap-6 border-b border-border/40 mt-8">
+          {(["Overview", "Location", "Playlists"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`text-[13px] font-bold pb-2.5 transition-all ${
+                activeTab === tab
+                  ? "text-foreground border-b-2 border-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Tab Contents */}
+      <div className="flex-1 overflow-y-auto bg-[#fafafc] px-10 py-6">
+        {activeTab === "Overview" && (
+          <div className="max-w-[1000px] space-y-6">
+            {/* Header info */}
+            <div>
+              <div className="flex items-center gap-1.5 text-[13px] font-bold text-foreground">
+                {dateRangeLabel} • {selectedLocation} <HelpCircle className="w-3.5 h-3.5 text-muted-foreground" />
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-1">
+                <Disc className="w-3.5 h-3.5" /> This page includes data from the audio track only.
+              </div>
+            </div>
+
+            {/* KPI Cards Row */}
+            <div className="grid grid-cols-5 gap-4">
+              {[
+                { key: "streams", label: "Streams", value: streams },
+                { key: "listeners", label: "Listeners", value: listeners },
+                { key: "ratio", label: "Streams / Listener", value: streamsPerListener, isRaw: true },
+                { key: "playlistAdds", label: "Playlist adds", value: playlistAdds },
+                { key: "saves", label: "Saves", value: saves },
+              ].map(card => {
+                const isActive = activeMetric === card.key || (card.key === "ratio" && activeMetric === "streams");
+                const clickable = card.key === "streams" || card.key === "listeners" || card.key === "saves";
+                return (
+                  <div
+                    key={card.key}
+                    onClick={() => {
+                      if (clickable) setActiveMetric(card.key as any);
+                    }}
+                    className={`p-4 rounded-xl shadow-sm border transition-all ${
+                      clickable ? "cursor-pointer" : ""
+                    } ${
+                      isActive 
+                        ? "bg-[#eceef8] border-primary/40 ring-1 ring-primary/10" 
+                        : "bg-white border-border hover:bg-muted/10"
+                    }`}
+                  >
+                    <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider mb-1 truncate">
+                      {card.label}
+                    </div>
+                    <div className="text-[22px] font-black text-foreground tracking-tight">
+                      {card.isRaw ? card.value : card.value.toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Sub action pills */}
+            <div className="flex gap-2">
+              <button className="flex items-center gap-1.5 px-4 py-1.5 bg-white border border-border/80 rounded-full text-[12px] font-bold text-foreground hover:bg-muted/30 transition-all shadow-sm">
+                Filter by source of streams
+              </button>
+              <button className="flex items-center gap-1.5 px-4 py-1.5 bg-white border border-border/80 rounded-full text-[12px] font-bold text-foreground hover:bg-muted/30 transition-all shadow-sm">
+                <Activity className="w-3.5 h-3.5" /> Compare songs
+              </button>
+            </div>
+
+            {/* Recharts Area Chart */}
+            <div className="bg-white p-6 rounded-xl border border-border shadow-sm">
+              <h3 className="text-[13px] font-bold text-foreground mb-4 uppercase tracking-wider">
+                {activeMetric.charAt(0).toUpperCase() + activeMetric.slice(1)} over time
+              </h3>
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorMetric" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.01}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                    <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => val >= 1000000 ? `${(val/1000000).toFixed(1)}M` : val >= 1000 ? `${(val/1000).toFixed(0)}K` : val} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: "#1e293b", borderRadius: "8px", border: "none", color: "#fff", fontSize: "12px", fontFamily: "'Inter', sans-serif" }}
+                      formatter={(val: any) => [val.toLocaleString(), activeMetric.charAt(0).toUpperCase() + activeMetric.slice(1)]}
+                    />
+                    <Area type="monotone" dataKey={activeMetric} stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorMetric)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Performance Data Table */}
+            <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+              <div className="grid grid-cols-12 px-6 py-4 bg-muted/20 border-b border-border text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                <div className="col-span-6">Streams • {dateRangeLabel}</div>
+                <div className="col-span-2 text-right">Previous Period</div>
+                <div className="col-span-2 text-right">This Period</div>
+                <div className="col-span-2 text-right">Change</div>
+              </div>
+              <div className="grid grid-cols-12 px-6 py-4 items-center text-[13px] font-bold text-foreground border-b border-border/50 last:border-b-0">
+                <div className="col-span-6 flex items-center gap-1">{selectedLocation}</div>
+                <div className="col-span-2 text-right text-muted-foreground font-medium">—</div>
+                <div className="col-span-2 text-right">{streams.toLocaleString()}</div>
+                <div className="col-span-2 text-right text-muted-foreground font-medium">—</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "Location" && (
+          <div className="max-w-[1000px] bg-white p-8 rounded-xl border border-border shadow-sm">
+            <h3 className="text-[16px] font-black text-foreground mb-4">Location breakdown</h3>
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <div className="text-[13px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Top Countries</div>
+                {countries.slice(1, 11).map((country, index) => {
+                  const factor = getCountryFactor(country);
+                  const countryStreams = Math.round(baseTotalStreams * factor * timeFactor);
+                  return (
+                    <div key={country} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0 text-[13px]">
+                      <span className="font-bold text-foreground">{index + 1}. {country}</span>
+                      <span className="font-medium text-muted-foreground">{countryStreams.toLocaleString()} streams</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="bg-muted/10 border border-border rounded-xl p-5 flex flex-col justify-center items-center text-center">
+                <Globe className="w-10 h-10 text-primary mb-3" />
+                <h4 className="font-bold text-[14px] text-foreground mb-1">Global Distribution</h4>
+                <p className="text-[12px] text-muted-foreground max-w-[300px]">
+                  Use the Filters button at the top right to analyze specific markets and regions.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "Playlists" && (
+          <div className="max-w-[1000px] bg-white p-8 rounded-xl border border-border shadow-sm text-center py-16">
+            <Music className="w-10 h-10 text-primary/80 mx-auto mb-3" />
+            <h3 className="text-[16px] font-black text-foreground mb-1">Playlist additions</h3>
+            <p className="text-[13px] text-muted-foreground max-w-sm mx-auto">
+              This track has been added to over <span className="font-bold text-foreground">{playlistAdds.toLocaleString()}</span> playlists worldwide in this period.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Filter Sidebar Drawer */}
+      {filterDrawerOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/40 z-[999] backdrop-blur-[1px]"
+            onClick={() => setFilterDrawerOpen(false)}
+          />
+          {/* Drawer content */}
+          <div className="fixed right-0 top-0 w-[320px] h-full bg-white border-l border-border shadow-2xl z-[1000] flex flex-col animate-slide-in">
+            <div className="p-5 border-b border-border flex justify-between items-center">
+              <h2 className="text-[16px] font-black text-foreground">Apply Filter</h2>
+              <button 
+                onClick={() => setFilterDrawerOpen(false)}
+                className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              {/* Time Section */}
+              <div>
+                <h3 className="text-[13px] font-black text-foreground uppercase tracking-wider mb-3">Time</h3>
+                <div className="space-y-3">
+                  {([
+                    { key: "7d", label: "7 days", disabled: false },
+                    { key: "28d", label: "28 days", disabled: false },
+                    { key: "12m", label: "12 months", disabled: false },
+                    { key: "custom", label: "Custom", disabled: true }
+                  ] as const).map(opt => (
+                    <label 
+                      key={opt.key}
+                      className={`flex items-center gap-3 cursor-pointer text-[13px] font-bold ${
+                        opt.disabled ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="tempTime"
+                        disabled={opt.disabled}
+                        checked={tempTimeRange === opt.key}
+                        onChange={() => setTempTimeRange(opt.key as any)}
+                        className="w-4.5 h-4.5 text-primary focus:ring-primary border-border"
+                      />
+                      <span className="text-foreground">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Locations Section */}
+              <div className="flex flex-col flex-1">
+                <h3 className="text-[13px] font-black text-foreground uppercase tracking-wider mb-2">Locations</h3>
+                <div className="relative mb-3">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={locationSearchQuery}
+                    onChange={(e) => setLocationSearchQuery(e.target.value)}
+                    placeholder="Filter by location"
+                    className="w-full pl-8 pr-3 py-1.5 text-[12px] font-medium bg-muted/40 border border-border/40 rounded-lg outline-none focus:border-foreground/30 text-foreground placeholder:text-muted-foreground transition-colors"
+                  />
+                </div>
+                
+                {/* Location Radios */}
+                <div className="h-[320px] overflow-y-auto border border-border/40 rounded-xl p-3 bg-[#fafafc] space-y-2.5">
+                  {filteredCountries.map(loc => (
+                    <label key={loc} className="flex items-center gap-3 cursor-pointer text-[13px] font-medium">
+                      <input
+                        type="radio"
+                        name="tempLoc"
+                        checked={tempLocation === loc}
+                        onChange={() => setTempLocation(loc)}
+                        className="w-4.5 h-4.5 text-primary focus:ring-primary border-border"
+                      />
+                      <span className={tempLocation === loc ? "font-bold text-foreground" : "text-[#535353]"}>{loc}</span>
+                    </label>
+                  ))}
+                  {filteredCountries.length === 0 && (
+                    <div className="text-[11px] text-muted-foreground text-center py-4">No countries found.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer buttons */}
+            <div className="p-5 border-t border-border flex gap-3 bg-white">
+              <button 
+                onClick={() => setFilterDrawerOpen(false)}
+                className="flex-1 py-2 rounded-full border border-border text-[13px] font-bold text-[#535353] hover:bg-muted/30 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setTimeRange(tempTimeRange);
+                  setSelectedLocation(tempLocation);
+                  setFilterDrawerOpen(false);
+                }}
+                className="flex-1 py-2 bg-black text-white rounded-full text-[13px] font-bold hover:bg-black/90 transition-colors shadow-md"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2526,6 +2986,7 @@ export default function App() {
   const [isDark, setIsDark] = useState(false);
   const [activeView, setActiveView] = useState<View>("dashboard");
   const [activeArtist, setActiveArtist] = useState<Artist>(roster[0]);
+  const [activeTrack, setActiveTrack] = useState<any>(null);
   const [liveRoster, setLiveRoster] = useState<Artist[]>(roster);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -2568,7 +3029,8 @@ export default function App() {
     switch (activeView) {
       case "dashboard": return <DashboardView onSelectArtist={handleSelectArtist} />;
       case "artists": return <ArtistProfileView artist={activeArtist} />;
-      case "music": return <MusicView artist={activeArtist} />;
+      case "music": return <MusicView artist={activeArtist} onSelectTrack={(track) => { setActiveTrack(track); setActiveView("track-detail"); }} />;
+      case "track-detail": return <TrackDetailView artist={activeArtist} track={activeTrack} onBack={() => setActiveView("music")} />;
       case "audience": return <AudienceView />;
       case "ai": return <AIAssistantView />;
       case "social": return <SocialListeningView />;
