@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   ComposedChart, AreaChart, Area, ResponsiveContainer, LineChart, Line,
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -276,25 +276,32 @@ function Sidebar({
           </div>
 
           {/* Artist Roster */}
-          <div className="flex-1 overflow-y-auto bg-white rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] p-2">
-            {rosterItems.map(artist => (
-              <button
-                key={artist.id}
-                onClick={() => { setActiveArtist(artist); setActiveView("artists"); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all mb-1 hover:bg-muted/50`}
-              >
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden" style={{ backgroundColor: artist.color }}>
-                  {('image_url' in artist) && (artist as any).image_url ? (
-                    <img src={(artist as any).image_url as string} alt={artist.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span>{artist.initials}</span>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0 text-left text-[14px] font-bold text-foreground truncate">
-                  {artist.name}
-                </div>
-              </button>
-            ))}
+          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-2">
+              {rosterItems.map(artist => (
+                <button
+                  key={artist.id}
+                  onClick={() => { setActiveArtist(artist); setActiveView("artists"); }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all mb-1 hover:bg-muted/50`}
+                >
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden" style={{ backgroundColor: artist.color }}>
+                    {('image_url' in artist) && (artist as any).image_url ? (
+                      <img src={(artist as any).image_url as string} alt={artist.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{artist.initials}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 text-left text-[14px] font-bold text-foreground truncate">
+                    {artist.name}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Add Artist Search/Action */}
+            <AddArtistInline onArtistAdded={() => {
+              window.dispatchEvent(new CustomEvent("reload-roster"));
+            }} />
           </div>
         </>
       ) : (
@@ -343,25 +350,32 @@ function Sidebar({
           </div>
 
           {/* Rest of the Roster */}
-          <div className="flex-1 overflow-y-auto bg-white rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] p-2">
-            {rosterItems.filter(a => a.id !== activeArtist.id).map(artist => (
-              <button
-                key={artist.id}
-                onClick={() => { setActiveArtist(artist); setActiveView("artists"); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all mb-1 hover:bg-muted/50"
-              >
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden" style={{ backgroundColor: artist.color }}>
-                  {('image_url' in artist) && (artist as any).image_url ? (
-                    <img src={(artist as any).image_url as string} alt={artist.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span>{artist.initials}</span>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0 text-left text-[14px] text-muted-foreground font-medium truncate">
-                  {artist.name}
-                </div>
-              </button>
-            ))}
+          <div className="flex-1 flex flex-col bg-white rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-2">
+              {rosterItems.filter(a => a.id !== activeArtist.id).map(artist => (
+                <button
+                  key={artist.id}
+                  onClick={() => { setActiveArtist(artist); setActiveView("artists"); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all mb-1 hover:bg-muted/50"
+                >
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden" style={{ backgroundColor: artist.color }}>
+                    {('image_url' in artist) && (artist as any).image_url ? (
+                      <img src={(artist as any).image_url as string} alt={artist.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{artist.initials}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 text-left text-[14px] text-muted-foreground font-medium truncate">
+                    {artist.name}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Add Artist Search/Action */}
+            <AddArtistInline onArtistAdded={() => {
+              window.dispatchEvent(new CustomEvent("reload-roster"));
+            }} />
           </div>
         </div>
       )}
@@ -373,6 +387,112 @@ function Sidebar({
         </button>
       </div>
     </aside>
+  );
+}
+
+function AddArtistInline({ onArtistAdded }: { onArtistAdded: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
+
+  // Search Spotify artists as the user types
+  useEffect(() => {
+    if (!query.trim() || query.length < 2) {
+      setResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(`/cm-api/search?q=${encodeURIComponent(query)}&limit=5`);
+        if (res.ok) {
+          const data = await res.json();
+          const items = data?.obj?.artists || [];
+          setResults(items);
+        }
+      } catch (err) {
+        console.error("Search failed:", err);
+      } finally {
+        setSearching(false);
+      }
+    }, 400); // debounce 400ms
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const handleAdd = async (artist: any) => {
+    setAdding(artist.name);
+    try {
+      const res = await fetch(`/api/spotify/add-artist?name=${encodeURIComponent(artist.name)}`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        setQuery("");
+        setResults([]);
+        onArtistAdded();
+      }
+    } catch (err) {
+      console.error("Failed to add artist:", err);
+    } finally {
+      setAdding(null);
+    }
+  };
+
+  return (
+    <div className="p-2 border-t border-border/50 bg-white relative flex flex-col gap-1.5 flex-shrink-0">
+      <div className="text-[10px] font-black text-muted-foreground uppercase tracking-wider mb-0.5 px-1">
+        Add New Artist
+      </div>
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search global Spotify..."
+          className="w-full pl-8 pr-3 py-1.5 text-[12px] font-medium bg-muted/40 border border-border/40 rounded-lg outline-none focus:border-foreground/30 text-foreground placeholder:text-muted-foreground transition-colors"
+        />
+      </div>
+
+      {/* Results Dropdown */}
+      {query.trim().length >= 2 && (
+        <div className="absolute bottom-[105%] left-2 right-2 bg-white border border-border rounded-xl shadow-xl p-1.5 z-[999] flex flex-col gap-1 max-h-[180px] overflow-y-auto">
+          {searching ? (
+            <div className="text-[11px] text-muted-foreground text-center py-3">Searching Spotify...</div>
+          ) : results.length === 0 ? (
+            <div className="text-[11px] text-muted-foreground text-center py-3">No artists found.</div>
+          ) : (
+            results.map((artist, idx) => (
+              <button
+                key={artist.id || idx}
+                onClick={() => handleAdd(artist)}
+                disabled={adding !== null}
+                className="w-full flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted/50 text-left transition-colors group disabled:opacity-50"
+              >
+                <div className="w-7 h-7 rounded-full bg-muted overflow-hidden flex-shrink-0 relative">
+                  {artist.image_url ? (
+                    <img src={artist.image_url} alt={artist.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-[#4100F5] opacity-25" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-bold text-foreground truncate">{artist.name}</div>
+                  <div className="text-[10px] text-muted-foreground truncate">
+                    {artist.sp_followers ? `${(artist.sp_followers / 1_000_000).toFixed(1)}M followers` : "Spotify Artist"}
+                  </div>
+                </div>
+                <div className="text-[11px] font-bold text-primary group-hover:underline pr-1 flex-shrink-0">
+                  {adding === artist.name ? "Adding..." : "+ Add"}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 // ─── Section Header ───────────────────────────────────────────────────────────
@@ -2344,20 +2464,28 @@ export default function App() {
   const [liveRoster, setLiveRoster] = useState<Artist[]>(roster);
   const [isMobile, setIsMobile] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    loadLiveData().then(data => {
-      if (!mounted) return;
+  const refreshRoster = useCallback(async () => {
+    try {
+      const data = await loadLiveData();
       if (data.roster?.length) {
         setLiveRoster(data.roster as Artist[]);
         setActiveArtist(prev => {
-          const match = (data.roster as Artist[]).find(a => a.name === prev.name);
+          const match = (data.roster as Artist[]).find(a => a.name.toLowerCase() === prev.name.toLowerCase());
           return match || (data.roster as Artist[])[0];
         });
       }
-    }).catch(() => { });
-    return () => { mounted = false; };
+    } catch (err) {
+      console.error("Failed to load live data:", err);
+    }
   }, []);
+
+  useEffect(() => {
+    refreshRoster();
+    window.addEventListener("reload-roster", refreshRoster);
+    return () => {
+      window.removeEventListener("reload-roster", refreshRoster);
+    };
+  }, [refreshRoster]);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);

@@ -1,5 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 import {
   buildSpotifyLiveBundle,
   fetchArtistCatalog,
@@ -23,11 +25,34 @@ const COHERE_API_KEY = process.env.COHERE_API_KEY;
 const XPOZ_API_KEY = process.env.XPOZ_API_KEY;
 const RAPIDAPI_SPOTIFY_KEY = process.env.RAPIDAPI_SPOTIFY_KEY;
 
-const TRACKED_ARTISTS = [
+const artistsFilePath = path.resolve(process.cwd(), 'scripts/tracked-artists.json');
+
+let TRACKED_ARTISTS = [
   'Rema', 'Ayra Starr', 'Boy Spyce', 'LOVN', 'CupidSZN',
   'Magixx', 'LADIPOE', 'Emijay', 'Real Dinoo', 'Bayanni', 'Johnny Drille'
-
 ];
+
+try {
+  if (fs.existsSync(artistsFilePath)) {
+    const fileData = fs.readFileSync(artistsFilePath, 'utf8');
+    const parsed = JSON.parse(fileData);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      TRACKED_ARTISTS = parsed;
+    }
+  } else {
+    fs.writeFileSync(artistsFilePath, JSON.stringify(TRACKED_ARTISTS, null, 2));
+  }
+} catch (err) {
+  console.warn('Failed to load/save tracked-artists.json, using default in-memory list:', err.message || err);
+}
+
+function saveTrackedArtists() {
+  try {
+    fs.writeFileSync(artistsFilePath, JSON.stringify(TRACKED_ARTISTS, null, 2));
+  } catch (err) {
+    console.error('Failed to save tracked-artists.json:', err.message || err);
+  }
+}
 
 let cachedToken = null;
 let tokenExpiresAt = 0;
@@ -295,6 +320,22 @@ app.get('/api/spotify/artist', async (req, res) => {
     const name = req.query.name;
     if (!name) return res.status(400).json({ error: 'name required' });
     res.json(await fetchArtistCatalog(String(name), SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET));
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+app.post('/api/spotify/add-artist', async (req, res) => {
+  try {
+    const name = req.query.name || req.body?.name;
+    if (!name) return res.status(400).json({ error: 'name required' });
+
+    const normalized = String(name).trim();
+    if (!TRACKED_ARTISTS.some(a => a.toLowerCase() === normalized.toLowerCase())) {
+      TRACKED_ARTISTS.push(normalized);
+      saveTrackedArtists();
+    }
+    res.json({ success: true, roster: TRACKED_ARTISTS });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
