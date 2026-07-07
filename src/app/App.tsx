@@ -298,10 +298,6 @@ function Sidebar({
               ))}
             </div>
 
-            {/* Add Artist Search/Action */}
-            <AddArtistInline onArtistAdded={() => {
-              window.dispatchEvent(new CustomEvent("reload-roster"));
-            }} />
           </div>
         </>
       ) : (
@@ -319,7 +315,10 @@ function Sidebar({
 
           {/* Artist Menu */}
           <div className="bg-white rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] p-4 flex-shrink-0">
-            <div className="flex items-center gap-3 mb-6 pl-1">
+            <button
+              onClick={() => setActiveView("artists")}
+              className="w-full flex items-center gap-3 mb-6 pl-1 text-left hover:opacity-85 transition-opacity group"
+            >
               <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-[12px] font-bold overflow-hidden flex-shrink-0 shadow-sm" style={{ backgroundColor: activeArtist.color }}>
                 {('image_url' in activeArtist) && (activeArtist as any).image_url ? (
                   <img src={(activeArtist as any).image_url as string} alt={activeArtist.name} className="w-full h-full object-cover" />
@@ -327,10 +326,10 @@ function Sidebar({
                   <span>{activeArtist.initials}</span>
                 )}
               </div>
-              <div className="flex-1 min-w-0 text-left text-[16px] font-bold text-foreground truncate">
+              <div className="flex-1 min-w-0 text-left text-[16px] font-bold text-foreground truncate group-hover:underline">
                 {activeArtist.name}
               </div>
-            </div>
+            </button>
 
             <div className="space-y-1">
               <button onClick={() => setActiveView("music")} className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left hover:bg-muted/50 transition-colors group">
@@ -341,11 +340,7 @@ function Sidebar({
                 <Users className={`w-5 h-5 stroke-[2] ${activeView === "audience" ? "text-foreground fill-foreground/10" : "text-muted-foreground group-hover:text-foreground"}`} />
                 <span className={`text-[14px] ${activeView === "audience" ? "font-bold text-foreground" : "font-medium text-muted-foreground group-hover:text-foreground"}`}>Audience</span>
               </button>
-              <button className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left hover:bg-muted/50 transition-colors group">
-                <PlaySquare className="w-5 h-5 stroke-[2] text-muted-foreground group-hover:text-foreground" />
-                <span className="text-[14px] font-medium text-muted-foreground group-hover:text-foreground flex-1">Video & Visuals</span>
-                <span className="bg-[#4100F5] text-white text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide">Beta</span>
-              </button>
+
             </div>
           </div>
 
@@ -372,10 +367,6 @@ function Sidebar({
               ))}
             </div>
 
-            {/* Add Artist Search/Action */}
-            <AddArtistInline onArtistAdded={() => {
-              window.dispatchEvent(new CustomEvent("reload-roster"));
-            }} />
           </div>
         </div>
       )}
@@ -1487,7 +1478,7 @@ function AudienceView() {
           <button className="text-[14px] font-bold text-muted-foreground hover:text-foreground pb-2 transition-colors">Segments</button>
           <button className="text-[14px] font-bold text-muted-foreground hover:text-foreground pb-2 transition-colors">Demographics</button>
           <button className="text-[14px] font-bold text-muted-foreground hover:text-foreground pb-2 transition-colors">Location</button>
-          <button className="text-[14px] font-bold text-muted-foreground hover:text-foreground pb-2 transition-colors">Release engagement</button>
+
         </div>
       </div>
 
@@ -1612,10 +1603,7 @@ function AudienceView() {
             </div>
           </div>
 
-          <div className="pb-10 flex items-center gap-4">
-            <span className="text-[14px] font-bold text-foreground">Segmentation</span>
-            <button className="px-4 py-1.5 bg-muted rounded-full text-[13px] font-bold text-foreground hover:bg-muted/80 transition-colors">Source of streams</button>
-          </div>
+
 
         </div>
       </div>
