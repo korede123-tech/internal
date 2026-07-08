@@ -551,6 +551,49 @@ function DashboardView({ onSelectArtist }: { onSelectArtist: (a: Artist) => void
   const [localRoster, setLocalRoster] = useState(roster);
   const [localStreamingHistory, setLocalStreamingHistory] = useState(streamingHistory);
 
+  const [globalQuery, setGlobalQuery] = useState("");
+  const [globalResults, setGlobalResults] = useState<any[]>([]);
+  const [searchingGlobal, setSearchingGlobal] = useState(false);
+
+  useEffect(() => {
+    if (!globalQuery.trim() || globalQuery.length < 2) {
+      setGlobalResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearchingGlobal(true);
+      try {
+        const res = await searchSpotifyArtists(globalQuery, 5);
+        setGlobalResults(res || []);
+      } catch (err) {
+        console.error("Global search failed:", err);
+      } finally {
+        setSearchingGlobal(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [globalQuery]);
+
+  const handleSelectGlobalResult = (result: any) => {
+    const newArtist: Artist = {
+      id: result.id,
+      name: result.name,
+      genre: result.genres?.[0] || "afrobeats",
+      country: "Global",
+      monthlyListeners: result.followers ? `${(result.followers / 1000000).toFixed(1)}M` : "0.0M",
+      totalStreams: "—",
+      growth: result.popularity || 50,
+      release: "—",
+      color: "#8B5CF6",
+      initials: result.name.charAt(0).toUpperCase(),
+      status: "active",
+      image_url: result.image_url,
+      spotify_url: result.spotify_url,
+      spotify_id: result.id
+    };
+    onSelectArtist(newArtist);
+  };
+
   useEffect(() => {
     // attempt to load live data and merge into UI state
     let mounted = true;
@@ -627,9 +670,43 @@ function DashboardView({ onSelectArtist }: { onSelectArtist: (a: Artist) => void
           <div className="relative w-[300px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
             <input
+              type="text"
+              value={globalQuery}
+              onChange={(e) => setGlobalQuery(e.target.value)}
               placeholder="Search all artists"
               className="w-full pl-10 pr-4 py-2.5 text-[14px] bg-card border border-border hover:border-black/30 rounded-md outline-none focus:border-black text-foreground placeholder:text-muted-foreground font-medium transition-colors"
             />
+            {globalQuery.trim().length >= 2 && (
+              <div className="absolute top-[105%] left-0 right-0 bg-white border border-border rounded-xl shadow-xl p-1.5 z-[999] flex flex-col gap-1 max-h-[250px] overflow-y-auto">
+                {searchingGlobal ? (
+                  <div className="text-[12px] text-muted-foreground text-center py-3">Searching Spotify...</div>
+                ) : globalResults.length === 0 ? (
+                  <div className="text-[12px] text-muted-foreground text-center py-3">No artists found.</div>
+                ) : (
+                  globalResults.map((artist, idx) => (
+                    <button
+                      key={artist.id || idx}
+                      onClick={() => handleSelectGlobalResult(artist)}
+                      className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/50 text-left transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-muted overflow-hidden flex-shrink-0 relative">
+                        {artist.image_url ? (
+                          <img src={artist.image_url} alt={artist.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-[#4100F5] opacity-25" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-bold text-foreground truncate">{artist.name}</div>
+                        <div className="text-[11px] text-muted-foreground truncate">
+                          {artist.followers ? `${(artist.followers / 1000000).toFixed(1)}M followers` : "Spotify Artist"}
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-6">
@@ -818,15 +895,7 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
             <h1 className="text-[72px] font-black text-white leading-none tracking-tight mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               {displayArtist.name}
             </h1>
-            <div className="flex items-center gap-2 text-white/90 font-medium text-[15px]">
-              <div className="flex items-end gap-0.5 h-3">
-                <div className="w-0.5 h-2 bg-white rounded-full animate-pulse"></div>
-                <div className="w-0.5 h-3 bg-white rounded-full animate-pulse delay-75"></div>
-                <div className="w-0.5 h-1.5 bg-white rounded-full animate-pulse delay-150"></div>
-                <div className="w-0.5 h-2.5 bg-white rounded-full animate-pulse delay-300"></div>
-              </div>
-              {Math.round(baseStreams * 0.0006).toLocaleString()} people listening now
-            </div>
+
           </div>
           <button className="flex items-center gap-2 bg-[#4100F5] hover:bg-[#3b00e0] transition-colors text-white px-5 py-2.5 rounded-full font-bold text-[14px]">
             <Eye className="w-4 h-4" />
