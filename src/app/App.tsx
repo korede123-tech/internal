@@ -782,7 +782,7 @@ function DashboardView({ onSelectArtist }: { onSelectArtist: (a: Artist) => void
 }
 
 // ─── Artist Profile ───────────────────────────────────────────────────────────
-function ArtistProfileView({ artist }: { artist: Artist }) {
+function ArtistProfileView({ artist, onSeeSongs }: { artist: Artist; onSeeSongs?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [cmArtist, setCmArtist] = useState<any>(null);
   const [spotifyData, setSpotifyData] = useState<any>(null);
@@ -1132,7 +1132,10 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
                   ))}
                 </div>
 
-                <div className="text-[13px] font-bold text-muted-foreground flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors">
+                <div 
+                  onClick={onSeeSongs}
+                  className="text-[13px] font-bold text-muted-foreground flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors"
+                >
                   See songs <ArrowRight className="w-3.5 h-3.5" />
                 </div>
               </div>
@@ -3074,7 +3077,7 @@ export default function App() {
   const renderContent = () => {
     switch (activeView) {
       case "dashboard": return <DashboardView onSelectArtist={handleSelectArtist} />;
-      case "artists": return <ArtistProfileView artist={activeArtist} />;
+      case "artists": return <ArtistProfileView artist={activeArtist} onSeeSongs={() => setActiveView("music")} />;
       case "music": return <MusicView artist={activeArtist} onSelectTrack={(track) => { setActiveTrack(track); setActiveView("track-detail"); }} />;
       case "track-detail": return <TrackDetailView artist={activeArtist} track={activeTrack} onBack={() => setActiveView("music")} />;
       case "audience": return <AudienceView />;
