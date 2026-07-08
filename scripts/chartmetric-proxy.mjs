@@ -220,7 +220,8 @@ async function spotifyCatalogHandler(req, res) {
         { id: 'mock-t5', name: 'Rush', album: '19 & Dangerous', release_date: '2021-08-06', popularity: 82, image_url: null, artists: [name] }
       ].map((t, idx) => {
         const pop = t.popularity;
-        const streams = Math.round(1000 * Math.exp(0.1455 * pop));
+        const expFactor = Math.exp((pop - 50) * 0.12);
+        const streams = Math.round(1500000 * expFactor * 0.3);
         return {
           ...t,
           cm_statistics: {
@@ -782,10 +783,14 @@ app.get('/api/cohere/live', async (_req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`API server running on http://localhost:${PORT}`);
-  console.log(`  Spotify:  GET /api/spotify/live`);
-  console.log(`  Spotify:  GET /api/spotify/artist-catalog?name=...`);
-  console.log(`  Social:   GET /api/xpoz/live`);
-  console.log(`  AI:       GET /api/cohere/live`);
-});
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`API server running on http://localhost:${PORT}`);
+    console.log(`  Spotify:  GET /api/spotify/live`);
+    console.log(`  Spotify:  GET /api/spotify/artist-catalog?name=...`);
+    console.log(`  Social:   GET /api/xpoz/live`);
+    console.log(`  AI:       GET /api/cohere/live`);
+  });
+}
+
+export default app;
