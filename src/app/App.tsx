@@ -238,9 +238,6 @@ function Header({ onSelectArtist }: { onSelectArtist?: (a: Artist) => void }) {
         )}
       </div>
       <div className="flex items-center gap-4 flex-shrink-0">
-        <button className="text-[13px] font-bold text-foreground px-4 py-1.5 rounded-full border border-border hover:border-foreground/50 transition-colors flex items-center gap-1.5">
-          Resources <ChevronDown className="w-3.5 h-3.5" />
-        </button>
         <button className="relative p-1 rounded-full hover:bg-muted transition-colors text-foreground">
           <Bell className="w-5 h-5" />
         </button>
@@ -974,7 +971,14 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
               <div className="col-span-8">
                 <div className="flex items-center gap-2 mb-4">
                   <h2 className="text-[15px] font-bold text-foreground">Audience development</h2>
-                  <span className="text-[13px] text-[#4100F5] font-medium cursor-pointer hover:underline">What's this?</span>
+                  <a 
+                    href="https://support.spotify.com/us/artists/article/audience-segments-on-spotify/" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-[13px] text-[#4100F5] font-medium cursor-pointer hover:underline"
+                  >
+                    What's this?
+                  </a>
                 </div>
                 <div className="bg-card rounded-xl p-5 shadow-sm grid grid-cols-3 gap-6">
                   <div>
