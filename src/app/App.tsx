@@ -1136,38 +1136,6 @@ function ArtistProfileView({ artist }: { artist: Artist }) {
                   See songs <ArrowRight className="w-3.5 h-3.5" />
                 </div>
               </div>
-
-              <div>
-                <div className="flex items-end justify-between mb-4 border-b border-border pb-2">
-                  <div>
-                    <h3 className="text-[15px] font-bold text-foreground">Your top playlists</h3>
-                    <div className="text-[12px] text-muted-foreground mt-0.5">Last 7 days</div>
-                  </div>
-                  <div className="text-[12px] font-bold text-foreground text-right">Streams<br /><span className="text-muted-foreground font-normal">6/11 – 6/17</span></div>
-                </div>
-
-                <div className="space-y-4">
-                  {[
-                    { name: "Radio", streams: 3514527, color: "#8EBEFF" },
-                    { name: "Mixes", streams: 1094864, color: "#83C588" },
-                    { name: "Your DJ", streams: 354837, color: "#6EB2FF" }
-                  ].map((pl, i) => (
-                    <div key={i} className="flex items-center gap-3 group cursor-pointer">
-                      <div className="w-10 h-10 rounded overflow-hidden flex items-center justify-center flex-shrink-0 shadow-sm" style={{ backgroundColor: pl.color }}>
-                        <div className="w-3.5 h-3.5 rounded-full border-2 border-white/50"></div>
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col justify-center">
-                        <div className="text-[13px] font-bold text-foreground truncate group-hover:underline">{pl.name}</div>
-                        <div className="text-[11px] text-muted-foreground">—</div>
-                      </div>
-                      <div className="text-[13px] font-medium text-foreground">
-                        {pl.streams.toLocaleString()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
             </div>
           </div>
 
