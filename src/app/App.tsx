@@ -185,13 +185,15 @@ function Header({ onSelectArtist }: { onSelectArtist?: (a: Artist) => void }) {
   return (
     <div className="h-16 px-6 flex items-center justify-between border-b border-border bg-card flex-shrink-0 z-10 w-full relative">
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-foreground rounded-full flex items-center justify-center text-background">
+        <div className="w-8 h-8 bg-[#FF6B00] rounded-full flex items-center justify-center text-white">
           <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.6 14.6c-.2.3-.6.4-.9.2-2.4-1.5-5.5-1.8-9.1-1-.4.1-.7-.2-.8-.6-.1-.4.2-.7.6-.8 3.9-.9 7.4-.5 10.1 1.2.3.2.4.6.1 1zM18 14.2c-.2.4-.7.5-1 .3-2.8-1.7-7.1-2.3-9.7-1.3-.4.2-.9-.1-1.1-.5-.2-.4.1-.9.5-1.1 3.1-1.2 7.8-.5 11 1.5.3.2.4.7.3 1.1zM18.2 11c-3.4-2-9-2.2-12.2-1.2-.5.2-1-.1-1.2-.6-.2-.5.1-1 .6-1.2 3.7-1.1 9.9-.9 13.8 1.4.5.3.6.8.3 1.3-.2.4-.8.5-1.3.3z" />
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+            <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            <circle cx="12" cy="12" r="2" fill="currentColor" />
           </svg>
         </div>
         <span className="text-[18px] font-black tracking-tight text-foreground" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          for Artists
+          for <span className="text-[#FF6B00]">MAVIN</span>
         </span>
       </div>
       <div className="flex-1 max-w-xl px-8 relative" ref={dropdownRef}>
