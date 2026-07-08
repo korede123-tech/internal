@@ -78,7 +78,7 @@ async function getRapidAPIStreamCount(trackName, artistName, apiKey) {
         'x-rapidapi-key': apiKey,
         'x-rapidapi-host': 'spotify-statistics-and-stream-count.p.rapidapi.com'
       },
-      signal: AbortSignal.timeout(2000)
+      signal: AbortSignal.timeout(10000)
     });
 
     if (!res.ok) return null;
@@ -114,7 +114,7 @@ async function getRapidAPIArtistStatsById(spotifyId, apiKey) {
         'x-rapidapi-key': apiKey,
         'x-rapidapi-host': 'spotify-statistics-and-stream-count.p.rapidapi.com'
       },
-      signal: AbortSignal.timeout(2000)
+      signal: AbortSignal.timeout(10000)
     });
 
     if (!res.ok) return null;
