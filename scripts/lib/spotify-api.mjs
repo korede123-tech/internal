@@ -269,6 +269,14 @@ async function fetchArtistSummaryFromArtist(artist, clientId, clientSecret) {
 }
 
 export async function fetchArtistSummary(name, clientId, clientSecret) {
+  const normalized = String(name || '').toLowerCase().trim();
+  const knownIds = {
+    'real dinoo': '3r3K4zm1MOUbvkGwTFvh40',
+    'anari': '7KbhpND4r8U28NI8jiRNgm'
+  };
+  if (knownIds[normalized]) {
+    return fetchArtistSummaryById(knownIds[normalized], clientId, clientSecret);
+  }
   const artist = await searchArtist(name, clientId, clientSecret);
   return fetchArtistSummaryFromArtist(artist, clientId, clientSecret);
 }

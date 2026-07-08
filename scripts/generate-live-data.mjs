@@ -21,7 +21,7 @@ function getCohereApiKey() {
   return process.env.COHERE_API_KEY || ''
 }
 
-const trackedArtists = ['Rema', 'Ayra Starr', 'Boy Spyce', 'LOVN', 'CupidSZN', 'Magixx', 'LADIPOE', 'Emijay', 'Real Dinoo', 'Bayanni', 'Johnny Drille']
+const trackedArtists = ['Rema', 'Ayra Starr', 'Boy Spyce', 'LOVN', 'CupidSZN', 'Magixx', 'LADIPOE', 'Emijay', 'Real Dinoo', 'Anari', 'Bayanni', 'Johnny Drille']
 const trackedSongs = ['Calm Down (Remix)', 'Rush', 'Ijo (Laba Laba)', 'Feeling', 'How Are You (My Friend)', 'Folake', "Love Don't Cost A Dime", 'Ta Ta Ta', 'Awww', 'Godwin', 'Goody Bag', 'Surulere', 'All Over', 'Easy (Jeje)', 'Bumper2Bumper', 'Kukere', 'How Can']
 
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
